@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {roomNumber,packageCode,parseCSV,buildRoster,validateEntry,csvString} from '../domain.js';
+test('building conversion retains floor/room and rejects building 4',()=>{for(const [a,b] of [['A101','1101'],['B203','2203'],['C105','3105'],['D102','5102'],['5401','5401']])assert.equal(roomNumber(a),b);for(const s of ['4101','101','5001','1101x',''])assert.throws(()=>roomNumber(s));});
+test('package classification never interprets GROUP as RO or missing as RB',()=>{for(const p of ['RO','OTARO','OTARO*','Room Only'])assert.equal(packageCode(p),'RO');assert.equal(packageCode('Room + Breakfast'),'RB');for(const p of ['GROUP','PROMO','', 'RO RB','HB'])assert.throws(()=>packageCode(p));});
+test('CSV handles BOM, multiline quoted fields, CRLF and escaped quotes',()=>{assert.deepEqual(parseCSV('\uFEFFRoom,Name\r\n1101,"Anna, \"\"A\"\"\nWilson"'),[['Room','Name'],['1101','Anna, "A"\nWilson']]);assert.throws(()=>parseCSV('a,b\n1,"unfinished'));});
+const map={room:0,name:1,pax:2,pkg:3};
+test('room/guest imports protect against duplicate and conflicting packages',()=>{const rows=[['Room','Name','Pax','Package'],['A101','A',2,'RB'],['1101','B',2,'RB']];assert.equal(buildRoster(rows,map,'room').errors.length,1);assert.equal(buildRoster(rows,map,'guest').rooms['1101'].pax,2);rows[2][3]='RO';assert.equal(buildRoster(rows,map,'guest').errors.length,1);rows[2]=['1101','A',2,'RB'];assert.equal(buildRoster(rows,map,'guest').errors.length,1);});
+test('entry validation guards count limits and RO payment',()=>{const r={pax:3,pkg:'RO'};validateEntry(r,1,2,50000,'cash');assert.throws(()=>validateEntry(r,2,2,50000,'cash'));assert.throws(()=>validateEntry(r,0,1,0,'cash'));assert.throws(()=>validateEntry(r,0,1,50000,''));assert.throws(()=>validateEntry(r,0,1.5,50000,'cash'));});
+test('CSV export neutralizes spreadsheet formula injection',()=>{assert.match(csvString([['=HYPERLINK("x")']]),/"'=HYPERLINK/);});

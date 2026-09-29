@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function allowed() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enabled == true
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'staff'];
+    }
+    function admin() {
+      return allowed() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    match /users/{uid} {
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+    match /days/{date} {
+      allow read: if allowed();
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['rooms','version','uploadedAt','uploadedBy','startAt','endAt'])
+        && request.resource.data.rooms is map
+        && request.resource.data.rooms.size() > 0 && request.resource.data.rooms.size() <= 1500
+        && request.resource.data.version is string
+        && request.resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.uploadedAt == request.time
+        && request.resource.data.startAt is timestamp && request.resource.data.endAt is timestamp
+        && request.resource.data.endAt - request.resource.data.startAt == duration.value(24,'h');
+      allow delete: if false;
+      function roster() { return get(/databases/$(database)/documents/days/$(date)).data; }
+      function beforeCount(room) {
+        return exists(/databases/$(database)/documents/days/$(date)/counts/$(room))
+          ? get(/databases/$(database)/documents/days/$(date)/counts/$(room)).data.count : 0;
+      }
+      function validEvent(e) {
+        let day = roster();
+        let r = day.rooms[e.room];
+        return e.keys().hasOnly(['room','names','pkg','pax','amount','method','staffUid','staffEmail','createdAt'])
+          && e.room.matches('^[1235][1-9][0-9]{2}$')
+          && e.names == r.names && e.pkg == r.pkg
+          && e.pax is int && e.pax > 0 && e.pax <= 50
+          && e.amount is int && e.amount >= 0 && e.amount <= 100000000
+          && ((e.pkg == 'RB' && e.amount == 0 && e.method == '')
+            || (e.pkg == 'RO' && e.amount > 0 && e.method in ['cash','card','transfer']))
+          && e.staffUid == request.auth.uid && e.staffEmail == request.auth.token.email
+          && e.createdAt == request.time
+          && request.time >= day.startAt && request.time < day.endAt
+          && beforeCount(e.room) + e.pax <= r.pax;
+      }
+      match /counts/{room} {
+        allow read: if allowed();
+        allow create, update: if allowed()
+          && request.resource.data.keys().hasOnly(['count','lastEvent'])
+          && request.resource.data.count is int
+          && request.resource.data.lastEvent is string
+          && !exists(/databases/$(database)/documents/days/$(date)/entries/$(request.resource.data.lastEvent))
+          && validEvent(getAfter(/databases/$(database)/documents/days/$(date)/entries/$(request.resource.data.lastEvent)).data)
+          && getAfter(/databases/$(database)/documents/days/$(date)/entries/$(request.resource.data.lastEvent)).data.room == room
+          && request.resource.data.count == beforeCount(room) + getAfter(/databases/$(database)/documents/days/$(date)/entries/$(request.resource.data.lastEvent)).data.pax;
+        allow delete: if false;
+      }
+      match /entries/{entryId} {
+        allow read: if allowed();
+        allow create: if allowed() && validEvent(request.resource.data)
+          && getAfter(/databases/$(database)/documents/days/$(date)/counts/$(request.resource.data.room)).data.lastEvent == entryId
+          && getAfter(/databases/$(database)/documents/days/$(date)/counts/$(request.resource.data.room)).data.count == beforeCount(request.resource.data.room) + request.resource.data.pax;
+        allow update, delete: if false;
+      }
+    }
+  }
+}
