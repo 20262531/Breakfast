@@ -14,6 +14,16 @@ service cloud.firestore {
       allow get: if request.auth != null && request.auth.uid == uid;
       allow list, write: if false;
     }
+    match /settings/breakfastRateCodes {
+      allow read: if admin();
+      allow create, update: if admin()
+        && request.resource.data.keys().hasOnly(['mapping','version','updatedBy','updatedAt'])
+        && request.resource.data.mapping is map && request.resource.data.mapping.size() <= 1000
+        && request.resource.data.version is string
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
     match /days/{date} {
       allow read: if allowed();
       allow create, update: if admin()
