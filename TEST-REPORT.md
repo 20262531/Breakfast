@@ -1,23 +1,19 @@
-# Validation — 29 September 2026
+# Local v2.0 — ผลตรวจสอบ
 
-Passed:
-- 6 automated domain tests: building conversion, strict packages, CSV parsing, import conflicts, count/payment limits, spreadsheet formula escaping.
-- Browser workflow at desktop and mobile widths: partial RB check-in, fully used room blocked, unpaid RO blocked, paid RO counted, D building conversion, import preserves counts and logs, invalid room rejected, history and CSV export.
-- Bundled XLSX reader: real .xlsx upload containing Thai name and D102; preview correctly shows 5102.
-- Thai font rendering and mobile layout inspected visually; no horizontal page overflow at 390px.
-- Firestore Emulator: rules compile; unauthenticated/disabled users blocked; staff cannot change roster or own role; atomic count+entry succeeds; repeated event ID does not add a second count; unpaid RO rejected; direct count tampering rejected; concurrent requests cannot exceed room occupancy; admin reimport preserves count/history; standalone forged entry rejected.
+ผ่าน domain/PDF unit tests 13 รายการ
+ผ่าน Chromium browser workflow ด้วย IndexedDB จริง:
+- นำเข้า CSV และตรวจสิทธิ์ RB/RO รับเงิน RO ตามเงื่อนไข
+- reload แล้วยอดเข้าทานยังอยู่
+- ปิดเบราว์เซอร์ทั้งหมด เปิดโปรไฟล์เดิมขณะออฟไลน์ รายชื่อ/ยอดยังอยู่ และบันทึกเพิ่มได้
+- ออฟไลน์: เปิดหน้าใหม่ อ่าน PDF สองรายงาน (รวม 79 ห้องพัก) อ่าน Excel และบันทึกเข้าทาน
+- การเขียนพร้อมกันสอง store connection บันทึกได้เพียงรายการที่ไม่เกินจำนวนผู้พัก
+- event ID เดิมไม่เพิ่มยอดซ้ำ
+- ไฟล์สำรอง JSON มีรายชื่อ ประวัติ จำนวน ยอดรับเงิน และ mapping Rate Code
+- กู้คืนครบแล้ว reload ยอดตรงกับไฟล์สำรอง
+- checksum ไม่ตรง/โครงสร้างผิด/ยอด counts ไม่ตรงกับ events ปฏิเสธก่อนเปลี่ยนข้อมูล
+- เปิดแท็บใหม่ใช้ฐานข้อมูลเดียวกัน โหมดทดลองแยกจากข้อมูลจริง
+- หน้าจอ 390px ไม่ล้นด้านข้าง
 
-Not connected to a live customer Firebase project. The supplied firebase-config.js is intentionally empty. Live project authentication, rules deployment, and network connectivity must be checked after configuration.
-
-PDF import extension validation:
-- All 21 pages of both supplied PDFs parsed with totals reconciled to the report footers.
-- LRR: 51 rooms, 63 adults + 2 children. RDL: 65 total document rooms, including 37 excluded accounting rooms; 39 adults + 1 child.
-- Merged 79 physical rooms, 105 reported occupants, initial RO 50 / RB 21 / REVIEW 8.
-- Actual-PDF browser workflow passed date acknowledgement, required FO reason, successful import, blocked REVIEW check-in, RO classification, pax aggregation, accounting-room exclusion, mobile overflow check.
-- Five additional parser tests passed for companion aggregation, conflicting evidence, explicit mapping, pseudo-room/zero/stale stay holds, and duplicate rows.
-- Firebase Emulator also checked admin-only rate mapping and rejection of REVIEW room entries.
-
-Reception screen v1.3:
-- Tested numeric keypad, automatic lookup after four digits, building shortcuts, backspace/clear, pax stepper and quick choices.
-- Tested default 1 pax, partial RB arrival, required RO payment, success/reset, exhausted room blocked, 9xxx blocked.
-- Tested reception focus mode and responsive widths 1280, 390 and 320 pixels. Desktop and mobile screenshots visually reviewed.
+ตรวจโดยใช้รายงาน PDF จริงในพื้นที่ทดสอบ แต่ไม่ได้บรรจุรายงานหรือไฟล์สำรองแขกใน ZIP
+ตรวจ Chromium บน Linux; ยังไม่ได้ทดสอบฮาร์ดแวร์โน้ตบุ๊ก Windows ของผู้ใช้
+ไม่ใช้ Firebase และไม่ได้ deploy เว็บไซต์แทนผู้ใช้

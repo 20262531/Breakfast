@@ -6,7 +6,7 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
  $('#pdf-date').value=today();
  function reset(){generation++;reports=[];rooms={};$('#pdf-results').textContent='';$('#pdf-progress').textContent='';}
  function fail(e){notify(e.message||'นำเข้าไม่สำเร็จ',true);}
- function network(){if(!getStore()?.demo&&!navigator.onLine)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ต');if(getStore()?.user.role!=='admin')throw new Error('เฉพาะผู้ดูแลเท่านั้น');}
+ function network(){if(!getStore()?.demo&&!getStore()?.local&&!navigator.onLine)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ต');if(getStore()?.user.role!=='admin')throw new Error('เฉพาะผู้ดูแลเท่านั้น');}
  for(const id of ['pdf-date','pdf-files'])$('#'+id).addEventListener('change',reset);
  document.addEventListener('laya-session-change',reset);
  $('#read-pdfs').addEventListener('click',async()=>{
