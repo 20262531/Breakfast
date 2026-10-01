@@ -46,9 +46,14 @@ export async function localStore(){
  async function emit(){const state=await read();for(const {date,cb} of listeners){const x=state.days[date]||{};cb({day:x.day||null,counts:x.counts||{},events:x.events||[],fresh:true});}}
  if(channel)channel.onmessage=()=>emit().catch(console.error);
  const changed=s=>{s.revision=crypto.randomUUID();s.changedAt=new Date().toISOString();};
- async function write(fn){const out=await transaction('readwrite',s=>{const result=fn(s);changed(s);return result;});await emit();channel?.postMessage('changed');return out;}
+ async function write(fn){const out=await transaction('readwrite',(s,bucket)=>{const result=fn(s);changed(s);bucket.put(clone(s),'auto-backup');return result;});await emit();channel?.postMessage('changed');return out;}
+ const setting=(mode,key,value)=>new Promise((resolve,reject)=>{const tx=db.transaction('data',mode),bucket=tx.objectStore('data');const q=mode==='readonly'?bucket.get(key):bucket.put(value,key);let result;q.onsuccess=()=>result=q.result;tx.oncomplete=()=>resolve(result);tx.onabort=()=>reject(tx.error);tx.onerror=()=>{};});
  const store={local:true,demo:false,user:{uid:'local-notebook',email:'โน้ตบุ๊กห้องอาหาร',role:'admin'},
   watch(date,cb,error){const listener={date,cb};listeners.add(listener);read().then(s=>{if(!listeners.has(listener))return;const x=s.days[date]||{};cb({day:x.day||null,counts:x.counts||{},events:x.events||[],fresh:true});}).catch(error||console.error);return()=>listeners.delete(listener);},
+  async getBackupFolder(){return setting('readonly','backup-folder');},
+  async setBackupFolder(handle){await setting('readwrite','backup-folder',handle);},
+  async getAutoSnapshot(){return setting('readonly','auto-backup');},
+  async resetDay(date,mode,expectedRevision){if(!validDate(date)||!['counts','all'].includes(mode))throw new Error('คำสั่งหรือวันที่ไม่ถูกต้อง');await transaction('readwrite',(s,bucket)=>{if(s.revision!==expectedRevision)throw new Error('ข้อมูลเปลี่ยนระหว่างสำรอง กรุณาลองใหม่');const x=s.days[date];if(!x)throw new Error('ไม่มีข้อมูลในวันที่เลือก');bucket.put(clone(s),'before-reset');if(mode==='all')delete s.days[date];else{x.counts={};x.events=[];}changed(s);bucket.put(clone(s),'auto-backup');return null;});await emit();channel?.postMessage('changed');},
   async getDay(date){return (await read()).days[date]?.day||null;},
   async getRateRules(){return (await read()).rateRules;},
   async saveRateRules(mapping,version){await write(s=>{if(s.rateRules.version!==version)throw new Error('รหัสราคาเปลี่ยนแล้ว กรุณาอ่านใหม่');s.rateRules={mapping:clone(mapping),version:crypto.randomUUID()};});},
@@ -59,15 +64,15 @@ export async function localStore(){
    if(r.pkg==='RB'&&(amount!==0||method!==''))throw new Error('RB ต้องไม่มียอดรับชำระ');
    x.counts[room]={count:(x.counts[room]?.count||0)+pax,lastEvent:id};x.events.push({id,room,names:clone(r.names),pkg:r.pkg,pax,amount,method,staffEmail:store.user.email,createdAt:new Date().toISOString()});
   });},
-  async status(){const s=await read();return {dirty:!!s.revision&&s.revision!==s.backupRevision,backupAt:s.backupAt,days:Object.keys(s.days).length,events:Object.values(s.days).reduce((n,x)=>n+x.events.length,0)};},
+  async status(){const s=await read();return {revision:s.revision,changedAt:s.changedAt,dirty:!!s.revision&&s.revision!==s.backupRevision,backupAt:s.backupAt,days:Object.keys(s.days).length,events:Object.values(s.days).reduce((n,x)=>n+x.events.length,0)};},
   async exportBackup(){const state=await read();const payload={format:'LAYA_BREAKFAST_LOCAL',schema:1,exportedAt:new Date().toISOString(),state,checksum:await digest(state)};return {text:JSON.stringify(payload),revision:state.revision};},
   async markBackup(revision){await transaction('readwrite',s=>{s.backupRevision=revision;s.backupAt=new Date().toISOString();return null;});},
   async restoreBackup(payload,expectedRevision){validateBackupState(payload.state);await transaction('readwrite',(s,bucket)=>{
    if(s.revision!==expectedRevision)throw new Error('ข้อมูลเปลี่ยนระหว่างตรวจไฟล์ กรุณาเลือกไฟล์สำรองใหม่');bucket.put(clone(s),'before-restore');
-   const restored=clone(payload.state);Object.assign(s,restored);changed(s);s.backupRevision=null;s.backupAt=null;return null;
+   const restored=clone(payload.state);Object.assign(s,restored);changed(s);s.backupRevision=null;s.backupAt=null;bucket.put(clone(s),'auto-backup');return null;
   });await emit();channel?.postMessage('changed');},
   async logout(){},async close(){channel?.close();db.close();}
  };
- await read();if(navigator.storage?.persist)try{await navigator.storage.persist();}catch{}
+ await transaction('readwrite',(s,bucket)=>{bucket.put(clone(s),'auto-backup');return null;});if(navigator.storage?.persist)try{await navigator.storage.persist();}catch{}
  return store;
 }
