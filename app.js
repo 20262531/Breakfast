@@ -141,3 +141,22 @@ function showOfflineStatus(){ $('#offline-status').textContent=offlineReady?'พ
 await startLocal();
 (async()=>{if('serviceWorker' in navigator){try{const reg=await navigator.serviceWorker.register('./sw.js');await navigator.serviceWorker.ready;const check=()=>{const worker=reg.active;if(worker){worker.postMessage('STATUS');}};navigator.serviceWorker.addEventListener('message',e=>{if(e.data==='OFFLINE_READY'){offlineReady=true;showOfflineStatus();}});check();navigator.serviceWorker.addEventListener('controllerchange',check);showOfflineStatus();}catch(e){$('#offline-status').textContent='ยังไม่พร้อมเปิดออฟไลน์ กรุณาเปิดผ่าน GitHub Pages และลองใหม่';}}
 else $('#offline-status').textContent='เบราว์เซอร์นี้ไม่รองรับการเปิดเว็บออฟไลน์';})();
+
+// Fit only reception on laptops. Import/history keep their normal page layout.
+let receptionFitFrame=0;
+function fitReception(){
+ cancelAnimationFrame(receptionFitFrame);
+ receptionFitFrame=requestAnimationFrame(()=>{
+  const active=page==='check'&&!$('#workspace').hidden&&matchMedia('(min-width:761px)').matches;
+  document.body.classList.toggle('reception-page',active);
+  const main=document.querySelector('main');main.style.zoom='1';main.style.width='';main.style.maxWidth='';
+  for(const dialog of [$('#rb-dialog'),$('#payment-dialog')]){dialog.style.zoom='1';if(active&&dialog.open){const height=dialog.getBoundingClientRect().height;dialog.style.zoom=String(Math.min(1,(innerHeight-32)/Math.max(1,height)));}}
+  if(active){const other=[document.querySelector('header'),$('#banner')].reduce((n,el)=>n+el.getBoundingClientRect().height,0);const height=main.getBoundingClientRect().height;const scale=Math.min(1,Math.max(1,innerHeight-other-8)/Math.max(1,height));main.style.zoom=String(scale);main.style.width=(innerWidth-8)/scale+'px';main.style.maxWidth=1250/scale+'px';window.scrollTo(0,0);}
+ });
+}
+new MutationObserver(fitReception).observe($('#workspace'),{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden','open']});
+for(const dialog of [$('#rb-dialog'),$('#payment-dialog')])new MutationObserver(fitReception).observe(dialog,{childList:true,subtree:true,attributes:true,attributeFilter:['open','hidden']});
+$('.reception-recent').addEventListener('toggle',fitReception);
+$('#focus-mode').addEventListener('click',fitReception);
+window.addEventListener('resize',fitReception);
+document.fonts.ready.then(fitReception);fitReception();

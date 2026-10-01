@@ -13,3 +13,70 @@
 #rb-dialog{width:min(520px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:0;border-radius:16px;padding:28px;color:#213c34;box-shadow:0 18px 80px #0004}#rb-dialog::backdrop{background:#10271ec9}#rb-dialog h2{margin:4px 0;font-size:25px}#rb-dialog h3{font-size:28px;line-height:1.4;color:#216236}#rb-dialog .pax-stepper input{max-width:none;font-size:36px;height:72px}#rb-dialog #save-entry{min-height:62px;font-size:19px;background:#247340;border-color:#247340}.rb-remaining{background:#e7f4e9;border-radius:8px;padding:10px 14px;color:#216236;font-weight:600}@media(max-width:760px){#rb-dialog{padding:20px}}
 
 .report-actions{display:flex;gap:8px;flex-wrap:wrap}.report-actions button{font-size:14px}.phase-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0}.phase-card{border:1px solid var(--line);border-radius:12px;background:#f6faf6;padding:18px}.phase-card h3{margin:6px 0 14px}.phase-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.phase-metrics small{display:block;color:var(--muted);font-size:12px}.phase-metrics strong{font-size:20px}#phase-print-pages{display:none}.print-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:20px 0}.print-summary small{display:block;color:#53665b}.print-summary strong{font-size:23px}.print-brand{letter-spacing:2px;font-weight:600;color:#163f36}.phase-print-page h1{font-size:26px}.phase-print-page h2{margin:26px 0 10px}.phase-print-page table{font-size:14px}.print-note{font-size:12px;color:#56675c;margin-top:22px}.print-signatures{display:flex;justify-content:space-between;margin-top:40px;font-size:13px}@media(max-width:760px){.phase-cards{grid-template-columns:1fr}}@media print{@page{size:A4 portrait;margin:16mm}body{background:#fff;color:#213c34}body>header,body>main,body>footer,body>dialog,body>#banner{display:none!important}#phase-print-pages{display:block!important}.phase-print-page{break-after:page;page-break-after:always;min-height:250mm}.phase-print-page:last-child{break-after:auto;page-break-after:auto}.phase-print-page table{width:100%;border-collapse:collapse}.phase-print-page td,.phase-print-page th{padding:10px 8px}.phase-print-page .print-summary{break-inside:avoid}.phase-print-page tr{break-inside:avoid}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+/* Compact reception for laptop screens; natural content is fitted without clipping. */
+@media screen and (min-width:761px){
+ body.reception-page>header{padding:6px 18px;gap:10px}
+ body.reception-page .brand{font-size:20px;gap:10px}
+ body.reception-page .mark{width:34px;height:36px;font-size:24px;line-height:36px}
+ body.reception-page>footer{display:none}
+ body.reception-page>main{min-height:0;padding:10px 18px;max-width:1250px}
+ .reception-page .local-backup-bar{padding:5px 12px;margin-bottom:8px;font-size:12px}
+ .reception-page .local-backup-bar>div{display:flex;align-items:center;gap:14px}
+ .reception-page .local-backup-bar button{min-height:32px;padding:4px 12px;font-size:12px}
+ .reception-page .toolbar{padding-bottom:8px;gap:10px}
+ .reception-page nav{padding:3px}
+ .reception-page nav button{min-height:34px;padding:4px 16px;font-size:14px}
+ .reception-page .reception-title{margin-bottom:8px;gap:10px}
+ .reception-page .reception-title h1{font-size:22px;margin:0}
+ .reception-page .reception-title .eyebrow{font-size:10px}
+ .reception-page .reception-actions button{min-height:36px;padding:5px 12px;font-size:13px}
+ .reception-page .reception-summary{padding:7px 16px;gap:12px;margin-bottom:10px}
+ .reception-page .reception-summary strong{font-size:21px;line-height:1.3}
+ .reception-page .reception-summary small{font-size:12px}
+ .reception-page .reception-grid{gap:12px;grid-template-columns:minmax(260px,.85fr) minmax(0,1.25fr)}
+ .reception-page .reception-grid>.panel{padding:14px 18px}
+ .reception-page .reception-step{margin-bottom:8px;font-size:12px}
+ .reception-page .reception-step span{font-size:14px}
+ .reception-page .search-panel .reception-room{height:60px;min-height:60px;font-size:36px;padding:6px}
+ .reception-page .room-description{min-height:0;font-size:12px;padding:4px 0}
+ .reception-page .building-shortcuts{gap:6px;margin:4px 0 8px}
+ .reception-page .building-shortcuts button{min-height:34px;padding:4px;font-size:15px}
+ .reception-page .room-keypad{gap:6px}
+ .reception-page .room-keypad button{min-height:44px;padding:5px;font-size:24px}
+ .reception-page .room-keypad .key-action{font-size:14px}
+ .reception-page #search-room{min-height:42px;padding:6px;font-size:15px;margin-top:8px}
+ .reception-page .guest-panel{min-height:0}
+ .reception-page .guest-wait{padding:46px 10px}
+ .reception-page .guest-wait h2{font-size:21px;margin:10px 0 4px}
+ .reception-page .guest-wait p{margin:6px 0;font-size:14px}
+ .reception-page .guest-state{padding:10px 14px}
+ .reception-page .state-label{font-size:17px}
+ .reception-page .guest-room{font-size:34px;margin:2px 0}
+ .reception-page .guest-panel .names{font-size:16px;margin:8px 0}
+ .reception-page .guest-panel .occupancy{gap:8px;margin:8px 0}
+ .reception-page .occupancy div{padding:6px 10px}
+ .reception-page .notice{padding:9px 12px;margin:8px 0;font-size:14px}
+ .reception-page .last-success{padding:6px 12px;margin-bottom:8px;font-size:14px}
+ .reception-page .reception-recent{padding:8px 16px;margin-top:8px}
+ .reception-page .reception-recent summary{font-size:13px}
+ .reception-page #recent:not(.empty){display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+ .reception-page #recent .entry{padding:6px 0;display:block;border:0;font-size:13px}
+ .reception-page #recent .entry-right{text-align:left}
+ .reception-page #recent.empty{padding:6px}
+ .reception-page #payment-dialog,.reception-page #rb-dialog{max-height:none;padding:16px 22px}
+ .reception-page dialog h2{font-size:20px}
+ .reception-page #payment-dialog h3{margin:8px 0;font-size:24px}
+ .reception-page dialog p{margin:6px 0}
+ .reception-page dialog .pax-stepper{margin:6px 0}
+ .reception-page dialog .pax-stepper button,.reception-page dialog .pax-stepper input{height:44px;min-height:44px}
+ .reception-page dialog .pax-quick button{min-height:34px;padding:4px 12px}
+ .reception-page dialog .payment-fields{margin-top:8px}
+ .reception-page dialog .form-grid{gap:10px}
+ .reception-page dialog input,.reception-page dialog select{min-height:40px;padding:7px}
+ .reception-page dialog .paid-check{margin:8px 0;padding:8px}
+ .reception-page dialog .paid-check input{min-height:21px}
+ .reception-page dialog #save-entry{min-height:44px;margin-top:8px;font-size:17px}
+}
+
+@media screen and (min-width:761px){.reception-page .backup-panel{display:none}}
