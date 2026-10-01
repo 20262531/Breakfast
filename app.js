@@ -10,9 +10,9 @@ let store,serviceDate=today(),currentState={day:null,counts:{},events:[],fresh:f
 function message(text,error=false){$('#message').textContent=text;$('#message').className=error?'error':'';$('#message').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#message').hidden=true,error?12000:5000);}
 function errorMessage(e){console.error(e.code||e.message);const messages={'permission-denied':'ไม่มีสิทธิ์เข้าถึงข้อมูล กรุณาตรวจบัญชีและ Firestore Rules','auth/invalid-credential':'อีเมลหรือรหัสผ่านไม่ถูกต้อง','auth/too-many-requests':'มีการลองเข้าสู่ระบบหลายครั้ง กรุณารอสักครู่','auth/network-request-failed':'เชื่อมต่อ Firebase ไม่ได้ กรุณาตรวจอินเทอร์เน็ต','unavailable':'เชื่อมต่อฐานข้อมูลไม่ได้ กรุณาลองใหม่','auth/invalid-api-key':'Firebase API key ไม่ถูกต้อง กรุณาตรวจ firebase-config.js'};return messages[e.code]||e.message||'เกิดข้อผิดพลาด กรุณาลองใหม่';}
 function failure(e){message(errorMessage(e),true);}
-function connection(){const online=navigator.onLine;$('#connection').textContent=store?.local?'บันทึกในเครื่อง':store?.demo?'โหมดทดลอง':!online?'ออฟไลน์ · หยุดบันทึก':store?(currentState.fresh?'เชื่อมต่อแล้ว':'กำลังซิงก์'):'ยังไม่เข้าสู่ระบบ';$('#banner').hidden=!!store?.local||(online&&!store?.demo);$('#banner').textContent=store?.demo?'โหมดทดลอง · ข้อมูลสมมติอยู่ในแท็บนี้ ไม่ส่งไป Firebase':!online?'อินเทอร์เน็ตขาดหาย กรุณารอเชื่อมต่อก่อนบันทึก':'';if($('#save-entry')){$('#save-entry').disabled=busy||(!store.demo&&!store.local&&(!online||!currentState.fresh));$('#save-entry').textContent=busy?'กำลังบันทึก…':selected?.expected.pkg==='RO'?($('#payment-dialog').open?'รับเงินแล้ว · ยืนยันเข้าทาน':'ชำระเงินก่อนเข้าทาน'):'ยืนยันเข้าทาน';}$('#cancel-payment').disabled=busy;$('#room').disabled=busy;document.querySelectorAll('#room-keypad button,[data-building],#search-room').forEach(b=>b.disabled=busy);document.querySelectorAll('#entry-form input,#entry-form select,#entry-form button:not(#save-entry)').forEach(b=>b.disabled=busy);if(!busy&&$('#pax')){const n=Number($('#pax').value);$('#pax-minus').disabled=n<=1;$('#pax-plus').disabled=n>=Number($('#pax').max);}}
+function connection(){const online=navigator.onLine;$('#connection').textContent=store?.local?'บันทึกในเครื่อง':store?.demo?'โหมดทดลอง':!online?'ออฟไลน์ · หยุดบันทึก':store?(currentState.fresh?'เชื่อมต่อแล้ว':'กำลังซิงก์'):'ยังไม่เข้าสู่ระบบ';$('#banner').hidden=!!store?.local||(online&&!store?.demo);$('#banner').textContent=store?.demo?'โหมดทดลอง · ข้อมูลสมมติอยู่ในแท็บนี้ ไม่ส่งไป Firebase':!online?'อินเทอร์เน็ตขาดหาย กรุณารอเชื่อมต่อก่อนบันทึก':'';if($('#save-entry')){$('#save-entry').disabled=busy||(!store.demo&&!store.local&&(!online||!currentState.fresh));$('#save-entry').textContent=busy?'กำลังบันทึก…':selected?.expected.pkg==='RO'?($('#payment-dialog').open?'รับเงินแล้ว · ยืนยันเข้าทาน':'ชำระเงินก่อนเข้าทาน'):($('#rb-dialog').open?'ยืนยันเข้าทาน':'ระบุจำนวนแขก');}$('#cancel-rb').disabled=busy;$('#cancel-payment').disabled=busy;$('#room').disabled=busy;document.querySelectorAll('#room-keypad button,[data-building],#search-room').forEach(b=>b.disabled=busy);document.querySelectorAll('#entry-form input,#entry-form select,#entry-form button:not(#save-entry)').forEach(b=>b.disabled=busy);if(!busy&&$('#pax')){const n=Number($('#pax').value);$('#pax-minus').disabled=n<=1;$('#pax-plus').disabled=n>=Number($('#pax').max);}}
 function requireOnline(){if(!store?.demo&&!store?.local&&!navigator.onLine)throw new Error('กรุณาเชื่อมต่ออินเทอร์เน็ตก่อนบันทึก');}
-function clearGuest(){closePayment();selected=null;$('#guest').innerHTML='<div class="guest-wait"><div class="waiting-number">— — — —</div><h2>รอเลขห้อง</h2><p>กรอกครบ 4 หลัก ระบบจะแสดงชื่อ<br>สิทธิ์อาหารเช้า และจำนวนผู้พัก</p></div>';}
+function clearGuest(){closePayment();closeGuestCount();selected=null;$('#guest').innerHTML='<div class="guest-wait"><div class="waiting-number">— — — —</div><h2>รอเลขห้อง</h2><p>กรอกครบ 4 หลัก ระบบจะแสดงชื่อ<br>สิทธิ์อาหารเช้า และจำนวนผู้พัก</p></div>';}
 function activate(s){document.body.classList.remove('reception-focus');$('#focus-mode').setAttribute('aria-pressed','false');$('#focus-mode').textContent='โหมดรับลูกค้า';$('#last-success').hidden=true;$('#room').value='';updateRoomDescription();unwatch();unhistory();store=s;clearGuest();currentState={day:null,counts:{},events:[],fresh:false};$('#gate').hidden=!!s;$('#workspace').hidden=!s;$('#logout').hidden=!s;$('#account').textContent=s?(s.local?'เครื่องนี้ · ผู้ดูแล':s.user.email+' · '+s.user.role):'';$('#backup-panel').hidden=!s?.local;$('#local-backup-reminder').hidden=!s?.local;if(!s){connection();return;}$('#admin-only').hidden=s.user.role==='admin';$('#import-controls').hidden=s.user.role!=='admin';serviceDate=today();$('#import-date').value=serviceDate;$('#pdf-date').value=serviceDate;$('#history-date').value=serviceDate;document.dispatchEvent(new Event('laya-session-change'));subscribe();connection();}
 function subscribe(){unwatch();unhistory();$('#service-date').textContent=serviceDate;unwatch=store.watch(serviceDate,state=>{currentState=state;renderDaily();refreshBackupStatus();if($('#history-date').value===serviceDate){historyState=state;renderHistory();}connection();},failure);watchHistory();}
 function watchHistory(){unhistory();historyState={events:[]};renderHistory();if(store&&$('#history-date').value===serviceDate){historyState=currentState;renderHistory();}else if(store&&$('#history-date').value)unhistory=store.watch($('#history-date').value,state=>{historyState=state;renderHistory();},failure);}
@@ -38,13 +38,13 @@ function findRoom(){
    const sync=()=>{const n=Number($('#pax').value);document.querySelectorAll('[data-pax]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.pax)===n)));$('#pax-minus').disabled=busy||n<=1;$('#pax-plus').disabled=busy||n>=remaining;};
    $('#pax-minus').addEventListener('click',()=>{$('#pax').value=Math.max(1,(Number($('#pax').value)||1)-1);sync();});
    $('#pax-plus').addEventListener('click',()=>{$('#pax').value=Math.min(remaining,(Number($('#pax').value)||1)+1);sync();});
-   document.querySelectorAll('[data-pax]').forEach(b=>b.addEventListener('click',()=>{$('#pax').value=b.dataset.pax;sync();}));$('#pax').addEventListener('input',sync);sync();
+   document.querySelectorAll('[data-pax]').forEach(b=>b.addEventListener('click',()=>{$('#pax').value=b.dataset.pax;sync();}));$('#pax').addEventListener('input',sync);$('#pax').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.repeat)e.preventDefault();});sync();
   }
   connection();
  }catch(e){$('#guest').innerHTML='<div class="guest-state payment" role="alert"><span class="state-label">ตรวจสอบเลขห้อง</span><p>'+esc(errorMessage(e))+'</p></div>';}
 }
 function updateRoomDescription(){
- const value=$('#room').value.toUpperCase();let text='ใส่เลขห้องแล้ว Enter · RB บันทึก / RO ชำระเงิน';
+ const value=$('#room').value.toUpperCase();let text='ใส่เลขห้องแล้ว Enter · RB ระบุจำนวน / RO ชำระเงิน';
  try{if(value.length===4){const room=roomNumber(value);text='ตึก '+buildings[room[0]]+' · ชั้น '+room[1]+' · ห้อง '+room.slice(2);}else if(buildings[value[0]])text='ตึก '+buildings[value[0]]+' · ใส่เลขที่เหลือ';}catch{text='รับเฉพาะตึก 1, 2, 3, 5 หรือ A, B, C, D';}
  $('#room-description').textContent=text;
  document.querySelectorAll('[data-building]').forEach(b=>b.setAttribute('aria-pressed',String(value[0]===b.dataset.building)));
@@ -57,7 +57,7 @@ function initReception(){
  $('#clear-room').addEventListener('click',()=>editRoom(''));$('#backspace-room').addEventListener('click',()=>editRoom($('#room').value.slice(0,-1)));
  $('#focus-mode').addEventListener('click',()=>{const active=document.body.classList.toggle('reception-focus');$('#focus-mode').setAttribute('aria-pressed',String(active));$('#focus-mode').textContent=active?'กลับเมนูหลัก':'โหมดรับลูกค้า';});
 }
-async function saveEntry(e){e.preventDefault();if(busy||!selected)return;if(selected.expected.pkg==='RO'&&(!$('#payment-dialog').open||!$('#paid')?.checked)){openPayment();return;}busy=true;connection();const request={...selected};try{requireOnline();if(serviceDate!==today())throw new Error('เปลี่ยนวันแล้ว กรุณาค้นหาใหม่');const pax=Number($('#pax').value),amount=request.expected.pkg==='RO'?Math.round(Number($('#amount').value)*100):0,method=request.expected.pkg==='RO'?$('#method').value:'';await store.checkin(serviceDate,request.room,pax,amount,method,request.id,request.expected);$('#message').hidden=true;clearTimeout(toastTimer);busy=false;clearGuest();connection();$('#room').value='';updateRoomDescription();$('#last-success').textContent='✓ ห้อง '+request.room+' · บันทึก '+pax+' คนแล้ว — พร้อมรับห้องถัดไป';$('#last-success').hidden=false;if(matchMedia('(pointer: fine)').matches)$('#room').focus({preventScroll:true});else{$('#room').blur();$('.search-panel').scrollIntoView({behavior:'instant',block:'start'});}}catch(err){failure(err);}finally{busy=false;connection();}}
+async function saveEntry(e){e.preventDefault();if(busy||!selected)return;if(selected.expected.pkg==='RB'&&!$('#rb-dialog').open){openGuestCount();return;}if(selected.expected.pkg==='RO'&&(!$('#payment-dialog').open||!$('#paid')?.checked)){openPayment();return;}busy=true;connection();const request={...selected};try{requireOnline();if(serviceDate!==today())throw new Error('เปลี่ยนวันแล้ว กรุณาค้นหาใหม่');const pax=Number($('#pax').value),amount=request.expected.pkg==='RO'?Math.round(Number($('#amount').value)*100):0,method=request.expected.pkg==='RO'?$('#method').value:'';await store.checkin(serviceDate,request.room,pax,amount,method,request.id,request.expected);$('#message').hidden=true;clearTimeout(toastTimer);busy=false;clearGuest();connection();$('#room').value='';updateRoomDescription();$('#last-success').textContent='✓ ห้อง '+request.room+' · บันทึก '+pax+' คนแล้ว — พร้อมรับห้องถัดไป';$('#last-success').hidden=false;if(matchMedia('(pointer: fine)').matches)$('#room').focus({preventScroll:true});else{$('#room').blur();$('.search-panel').scrollIntoView({behavior:'instant',block:'start'});}}catch(err){failure(err);}finally{busy=false;connection();}}
 function restorePaymentForm(){
  const form=$('#payment-body #entry-form');if(!form)return;
  if(selected){$('#guest').append(form);form.querySelector('.payment-fields').hidden=true;form.querySelector('#save-entry').type='button';form.querySelector('#paid').checked=false;form.querySelector('#paid').required=false;form.querySelector('#amount').required=false;}else form.remove();
@@ -71,13 +71,24 @@ function openPayment(){
  $('#payment-body').append($('#entry-form'));$('#payment-body .payment-fields').hidden=false;$('#save-entry').type='submit';$('#amount').required=true;$('#paid').required=true;
  dialog.showModal();connection();$('#amount').focus();
 }
+function restoreGuestCountForm(){const form=$('#rb-body #entry-form');if(!form)return;if(selected)$('#guest').append(form);else form.remove();connection();}
+function closeGuestCount(){if($('#rb-dialog').open)$('#rb-dialog').close();restoreGuestCountForm();}
+function openGuestCount(){
+ if(busy||selected?.expected.pkg!=='RB'||!$('#entry-form'))return;const dialog=$('#rb-dialog');if(dialog.open)return;
+ $('#rb-room').textContent='ห้อง '+selected.room+' · RB';$('#rb-names').textContent=selected.expected.names.join(' / ');
+ $('#rb-remaining').textContent='เข้าทานได้อีก '+Math.max(0,selected.expected.pax-(currentState.counts[selected.room]?.count||0))+' คน';
+ $('#rb-body').append($('#entry-form'));dialog.showModal();connection();$('#pax').focus();$('#pax').select();
+}
+$('#cancel-rb').addEventListener('click',()=>{if(!busy){closeGuestCount();$('#room').focus();}});
+$('#rb-dialog').addEventListener('cancel',e=>{if(busy)e.preventDefault();});
+$('#rb-dialog').addEventListener('close',()=>{if($('#rb-dialog').open)return;restoreGuestCountForm();if(!busy&&selected)$('#room').focus();});
 function quickEntry(){
- if(busy||!store||$('#payment-dialog').open)return;
+ if(busy||!store||$('#payment-dialog').open||$('#rb-dialog').open)return;
  const raw=$('#room').value.trim();if(!raw)return;
  let room;try{room=roomNumber(raw);}catch{findRoom();return;}
  if(selected?.room!==room)findRoom();
  if(!selected||selected.room!==room||!$('#entry-form'))return;
- if(selected.expected.pkg==='RO')openPayment();else $('#entry-form').requestSubmit();
+ if(selected.expected.pkg==='RO')openPayment();else openGuestCount();
 }
 $('#cancel-payment').addEventListener('click',()=>{if(!busy){closePayment();$('#room').focus();}});
 $('#payment-dialog').addEventListener('cancel',e=>{if(busy)e.preventDefault();});
