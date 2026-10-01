@@ -16,3 +16,8 @@ PDF import extension validation:
 - Actual-PDF browser workflow passed date acknowledgement, required FO reason, successful import, blocked REVIEW check-in, RO classification, pax aggregation, accounting-room exclusion, mobile overflow check.
 - Five additional parser tests passed for companion aggregation, conflicting evidence, explicit mapping, pseudo-room/zero/stale stay holds, and duplicate rows.
 - Firebase Emulator also checked admin-only rate mapping and rejection of REVIEW room entries.
+
+Reception screen v1.3:
+- Tested numeric keypad, automatic lookup after four digits, building shortcuts, backspace/clear, pax stepper and quick choices.
+- Tested default 1 pax, partial RB arrival, required RO payment, success/reset, exhausted room blocked, 9xxx blocked.
+- Tested reception focus mode and responsive widths 1280, 390 and 320 pixels. Desktop and mobile screenshots visually reviewed.

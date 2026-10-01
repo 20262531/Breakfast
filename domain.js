@@ -32,11 +32,17 @@ export function parseCSV(text){
 }
 export function buildRoster(rows,map,mode){
   if(rows.length<2)throw new Error('ไม่พบข้อมูลในไฟล์');
-  const rooms={},errors=[],seen=new Set();
+  const rooms={},errors=[],skipped=[],seen=new Set();
   rows.slice(1).forEach((row,i)=>{
     if(!row.some(x=>String(x??'').trim()))return;
     try{
-      const room=roomNumber(row[map.room]);const name=String(row[map.name]??'').trim();
+      const rawRoom=String(row[map.room]??'').trim().toUpperCase();
+      // PM, POS and other accounting rooms are present in daily guest reports.
+      // Still reject malformed values that look like a guest room (e.g. 110 or A10).
+      if(rawRoom&&!/^[1235ABCD]/.test(rawRoom)){
+        skipped.push({row:i+2,room:rawRoom});return;
+      }
+      const room=roomNumber(rawRoom);const name=String(row[map.name]??'').trim();
       if(!name||name.length>300)throw new Error('ชื่อแขกต้องมี 1–300 ตัวอักษร');
       const pkg=packageCode(row[map.pkg]);
       const pax=mode==='guest'?1:Number(row[map.pax]);
@@ -53,7 +59,7 @@ export function buildRoster(rows,map,mode){
   });
   if(Object.keys(rooms).length>1500)errors.push('รองรับไม่เกิน 1,500 ห้องต่อวัน');
   if(new TextEncoder().encode(JSON.stringify(rooms)).length>700000)errors.push('ข้อมูลเกินขนาด 700 KB กรุณาลดคอลัมน์ชื่อหรือแบ่งข้อมูล');
-  return {rooms,errors};
+  return {rooms,errors,skipped};
 }
 export function validateEntry(room,count,pax,amount,method){
   if(!room)throw new Error('ไม่พบห้องในข้อมูลประจำวัน');
