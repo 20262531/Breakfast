@@ -1,4 +1,4 @@
-import {today,roomNumber,validateEntry} from './domain.js';
+import {today,roomNumber,validateEntry,makeWalkinEvent} from './domain.js';
 const DB='laya-breakfast-local-v1', KEY='state';
 const empty=()=>({days:{},rateRules:{mapping:{},version:null},revision:null,changedAt:null,backupRevision:null,backupAt:null});
 const clone=x=>structuredClone(x);
@@ -17,12 +17,13 @@ export function validateBackupState(state){
   }
   const ids=new Set(),counts={};
   for(const e of x.events){
-   if(!plain(e)||typeof e.id!=='string'||!e.id||ids.has(e.id)||roomNumber(e.room)!==e.room||!Array.isArray(e.names)||!e.names.length||e.names.some(n=>typeof n!=='string'||n.length>300)||!Number.isSafeInteger(e.pax)||e.pax<1||!Number.isInteger(e.amount)||e.amount<0||e.amount>100000000||typeof e.staffEmail!=='string'||Number.isNaN(Date.parse(e.createdAt)))fail();
+   if(!plain(e)||typeof e.id!=='string'||!e.id||ids.has(e.id)||(e.pkg==='WALKIN'?(e.room!==''||![1,2].includes(e.phase)):roomNumber(e.room)!==e.room)||!Array.isArray(e.names)||!e.names.length||e.names.some(n=>typeof n!=='string'||n.length>300)||!Number.isSafeInteger(e.pax)||e.pax<1||!Number.isInteger(e.amount)||e.amount<0||e.amount>100000000||typeof e.staffEmail!=='string'||Number.isNaN(Date.parse(e.createdAt)))fail();
    if(e.paymentStatus!==undefined&&!['paid','pending'].includes(e.paymentStatus))fail();
-   if(e.paymentStatus==='pending'){if(e.pkg!=='RO'||e.amount!==0||e.method!==''||!Number.isInteger(e.dueAmount)||e.dueAmount<=0||e.dueAmount>100000000)fail();}
-   else if(!(e.pkg==='RB'&&e.amount===0&&e.method==='')&&!(e.pkg==='RO'&&e.amount>0&&['cash','card','transfer'].includes(e.method)))fail();
+   if(e.pkg==='WALKIN'&&!['paid','pending'].includes(e.paymentStatus))fail();
+   if(e.paymentStatus==='pending'){if(!['RO','WALKIN'].includes(e.pkg)||e.amount!==0||e.method!==''||!Number.isInteger(e.dueAmount)||e.dueAmount<=0||e.dueAmount>100000000)fail();}
+   else if(!(e.pkg==='RB'&&e.amount===0&&e.method==='')&&!(['RO','WALKIN'].includes(e.pkg)&&e.amount>0&&['cash','card','transfer'].includes(e.method)))fail();
    if(e.paymentStatus==='paid'&&e.dueAmount!==0)fail();
-   ids.add(e.id);counts[e.room]=(counts[e.room]||0)+e.pax;if(!Number.isSafeInteger(counts[e.room]))fail();
+   ids.add(e.id);if(e.pkg==='WALKIN')continue;counts[e.room]=(counts[e.room]||0)+e.pax;if(!Number.isSafeInteger(counts[e.room]))fail();
   }
   if(Object.keys(x.counts).length!==Object.keys(counts).length)fail();
   for(const [room,n] of Object.entries(counts))if(!plain(x.counts[room])||x.counts[room].count!==n)fail();
@@ -67,7 +68,8 @@ export async function localStore(){
    if(r.pkg==='RB'&&(amount!==0||method!==''))throw new Error('RB ต้องไม่มียอดรับชำระ');
    x.counts[room]={count:(x.counts[room]?.count||0)+pax,lastEvent:id};x.events.push({id,room,names:clone(r.names),pkg:r.pkg,pax,amount,method,staffEmail:store.user.email,createdAt:new Date().toISOString(),...(payment?{paymentStatus:payment.status,dueAmount:payment.dueAmount}:{} )});
   });},
-  async settlePayment(date,id,method){if(!validDate(date)||!['cash','card','transfer'].includes(method))throw new Error('วันที่หรือวิธีรับเงินไม่ถูกต้อง');await write(s=>{const e=s.days[date]?.events.find(e=>e.id===id);if(!e)throw new Error('ไม่พบรายการ อาจถูกล้างแล้ว');if(e.paymentStatus!=='pending')return;if(e.pkg!=='RO'||!Number.isInteger(e.dueAmount)||e.dueAmount<=0)throw new Error('ยอดค้างไม่ถูกต้อง');e.amount=e.dueAmount;e.dueAmount=0;e.paymentStatus='paid';e.method=method;e.settledAt=new Date().toISOString();e.settledBy=store.user.email;});},
+  async walkin(date,input){await write(s=>{if(date!==today())throw new Error('เปลี่ยนวันแล้ว กรุณาเปิด Walk-in ใหม่');const event=makeWalkinEvent(input,store.user.email);const x=s.days[date]??={day:{rooms:{},version:crypto.randomUUID(),walkinOnly:true},counts:{},events:[]};if(x.events.some(e=>e.id===event.id))return;x.events.push(event);});},
+  async settlePayment(date,id,method){if(!validDate(date)||!['cash','card','transfer'].includes(method))throw new Error('วันที่หรือวิธีรับเงินไม่ถูกต้อง');await write(s=>{const e=s.days[date]?.events.find(e=>e.id===id);if(!e)throw new Error('ไม่พบรายการ อาจถูกล้างแล้ว');if(e.paymentStatus!=='pending')return;if(!['RO','WALKIN'].includes(e.pkg)||!Number.isInteger(e.dueAmount)||e.dueAmount<=0)throw new Error('ยอดค้างไม่ถูกต้อง');e.amount=e.dueAmount;e.dueAmount=0;e.paymentStatus='paid';e.method=method;e.settledAt=new Date().toISOString();e.settledBy=store.user.email;});},
   async status(){const s=await read();return {revision:s.revision,changedAt:s.changedAt,dirty:!!s.revision&&s.revision!==s.backupRevision,backupAt:s.backupAt,days:Object.keys(s.days).length,events:Object.values(s.days).reduce((n,x)=>n+x.events.length,0)};},
   async exportBackup(){const state=await read();const payload={format:'LAYA_BREAKFAST_LOCAL',schema:1,exportedAt:new Date().toISOString(),state,checksum:await digest(state)};return {text:JSON.stringify(payload),revision:state.revision};},
   async markBackup(revision){await transaction('readwrite',s=>{s.backupRevision=revision;s.backupAt=new Date().toISOString();return null;});},

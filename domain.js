@@ -73,3 +73,8 @@ export function validateEntry(room,count,pax,amount,method,paymentStatus='paid',
 }
 export function csvCell(value){let s=String(value??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
 export function csvString(rows){return '\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');}
+export function makeWalkinEvent({id,name='',phase=1,pax,amount,method,paymentStatus='paid'},staffEmail){
+ if(typeof id!=='string'||!id||id.length>200||![1,2].includes(phase)||typeof name!=='string'||name.length>300)throw new Error('ข้อมูล Walk-in ไม่ถูกต้อง');
+ validateEntry({pkg:'RO'},0,pax,paymentStatus==='pending'?0:amount,paymentStatus==='pending'?'':method,paymentStatus,paymentStatus==='pending'?amount:0);
+ return {id,room:'',names:[name.trim()||'Walk-in'],pkg:'WALKIN',phase,pax,amount:paymentStatus==='pending'?0:amount,method:paymentStatus==='pending'?'':method,paymentStatus,dueAmount:paymentStatus==='pending'?amount:0,staffEmail,createdAt:new Date().toISOString()};
+}
