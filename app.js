@@ -71,7 +71,7 @@ function closePayment(){if($('#payment-dialog').open)$('#payment-dialog').close(
 function openPayment(){
  if(busy||selected?.expected.pkg!=='RO'||!$('#entry-form'))return;
  const dialog=$('#payment-dialog');if(dialog.open)return;
- $('#payment-room').textContent='ห้อง '+selected.room+' · RO';$('#payment-names').textContent=selected.expected.names.join(' / ');
+ $('#payment-room').textContent='ห้อง '+selected.room+' · RO';$('#payment-names').textContent=selected.expected.names.join('\n');
  $('#payment-body').append($('#entry-form'));$('#payment-body .payment-fields').hidden=false;$('#save-pending').hidden=false;$('#save-entry').type='submit';$('#amount').required=true;
  dialog.showModal();connection();$('#amount').focus();
 }
@@ -79,7 +79,7 @@ function restoreGuestCountForm(){const form=$('#rb-body #entry-form');if(!form)r
 function closeGuestCount(){if($('#rb-dialog').open)$('#rb-dialog').close();restoreGuestCountForm();}
 function openGuestCount(){
  if(busy||selected?.expected.pkg!=='RB'||!$('#entry-form'))return;const dialog=$('#rb-dialog');if(dialog.open)return;
- $('#rb-room').textContent='ห้อง '+selected.room+' · RB';$('#rb-names').textContent=selected.expected.names.join(' / ');
+ $('#rb-room').textContent='ห้อง '+selected.room+' · RB';$('#rb-names').textContent=selected.expected.names.join('\n');
  $('#rb-remaining').textContent='ผู้พักตามรายงาน '+selected.expected.pax+' คน · เข้าทานแล้ว '+(currentState.counts[selected.room]?.count||0)+' คน · เพิ่มตามจำนวนจริงได้';
  $('#rb-body').append($('#entry-form'));dialog.showModal();connection();$('#pax').focus();$('#pax').select();
 }

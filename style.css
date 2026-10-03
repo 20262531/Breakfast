@@ -90,3 +90,5 @@
 .pending-entry>div{min-width:0;overflow-wrap:anywhere}.pending-entry button{flex-shrink:0}
 
 .price-presets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}.price-presets>span,.price-presets>small{grid-column:1/-1}.price-presets>small{font-size:12px;color:var(--muted)}.price-presets button{min-height:42px;font-size:20px;font-weight:600;touch-action:manipulation}.price-presets button[aria-pressed=true]{background:#163f36;color:white;border-color:#163f36}
+
+#rb-names,#payment-names{font-size:26px;font-weight:600;line-height:1.4;white-space:pre-line;overflow-wrap:anywhere;color:#163f36;background:#edf5ee;border-left:4px solid #317f46;border-radius:8px;padding:10px 14px;margin:10px 0}#payment-names{color:#7b2d20;background:#fff0e9;border-left-color:#a53b2b}@media(max-width:760px){#rb-names,#payment-names{font-size:22px;padding:10px 12px}}
