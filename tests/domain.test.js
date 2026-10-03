@@ -5,7 +5,7 @@ test('building conversion retains floor/room and rejects building 4',()=>{for(co
 test('package classification never interprets GROUP as RO or missing as RB',()=>{for(const p of ['RO','OTARO','OTARO*','Room Only'])assert.equal(packageCode(p),'RO');assert.equal(packageCode('Room + Breakfast'),'RB');for(const p of ['GROUP','PROMO','', 'RO RB','HB'])assert.throws(()=>packageCode(p));});
 test('CSV handles BOM, multiline quoted fields, CRLF and escaped quotes',()=>{assert.deepEqual(parseCSV('\uFEFFRoom,Name\r\n1101,"Anna, \"\"A\"\"\nWilson"'),[['Room','Name'],['1101','Anna, "A"\nWilson']]);assert.throws(()=>parseCSV('a,b\n1,"unfinished'));});
 const map={room:0,name:1,pax:2,pkg:3};
-test('room/guest imports protect against duplicate and conflicting packages',()=>{const rows=[['Room','Name','Pax','Package'],['A101','A',2,'RB'],['1101','B',2,'RB']];assert.equal(buildRoster(rows,map,'room').errors.length,1);assert.equal(buildRoster(rows,map,'guest').rooms['1101'].pax,2);rows[2][3]='RO';assert.equal(buildRoster(rows,map,'guest').errors.length,1);rows[2]=['1101','A',2,'RB'];assert.equal(buildRoster(rows,map,'guest').errors.length,1);});
+test('room/guest imports protect against duplicate and conflicting packages',()=>{const rows=[['Room','Name','Pax','Package'],['A101','A',2,'RB'],['1101','B',2,'RB']];assert.equal(buildRoster(rows,map,'room').errors.length,0);assert.equal(buildRoster(rows,map,'room').rooms['1101'].pax,4);assert.equal(buildRoster(rows,map,'guest').rooms['1101'].pax,2);rows[2][3]='RO';assert.equal(buildRoster(rows,map,'guest').errors.length,1);rows[2]=['1101','A',2,'RB'];assert.equal(buildRoster(rows,map,'guest').errors.length,1);});
 test('CSV imports exclude PM, POS, 9xxx and all buildings outside A-D before counting guests',()=>{
   const rows=[['Room','Name','Pax','Package'],['1101','Guest A',2,'RB'],['D102','Guest D',1,'RO'],['9000','PM',0,''],['9100','POS',0,''],['4111','Other tower',7,'RB'],['PM ROOM','Accounting',10,'']];
   const result=buildRoster(rows,map,'room');
@@ -20,3 +20,6 @@ test('a mistyped guest room remains an error, not a silently excluded accounting
 });
 test('entry validation guards count limits and RO payment',()=>{const r={pax:3,pkg:'RO'};validateEntry(r,1,2,50000,'cash');assert.throws(()=>validateEntry(r,2,2,50000,'cash'));assert.throws(()=>validateEntry(r,0,1,0,'cash'));assert.throws(()=>validateEntry(r,0,1,50000,''));assert.throws(()=>validateEntry(r,0,1.5,50000,'cash'));});
 test('CSV export neutralizes spreadsheet formula injection',()=>{assert.match(csvString([['=HYPERLINK("x")']]),/"'=HYPERLINK/);});
+test('repeated spreadsheet rooms accumulate counts, while rejected rows cannot change prior totals',()=>{
+ const rows=[['Room','Name','Pax','Package'],['D101','A',20,'RO'],['5101','B',25,'RO'],['5101','C',10,'RO']];const result=buildRoster(rows,map,'room');assert.equal(result.rooms['5101'].pax,45);assert.equal(result.rooms['5101'].names.length,2);assert.equal(result.errors.length,1);
+});

@@ -57,11 +57,11 @@ export function mergeReports(reports,serviceDate,rateMap={}){
   const rooms={};
   for(const report of reports)for(const record of report.records){
     if(!/^[1235][1-9]\d{2}$/.test(record.room))continue;
-    const r=rooms[record.room]??={room:record.room,names:[],adults:0,children:0,pax:0,pkg:'REVIEW',rates:[],sources:[],lines:[],evidence:[],issues:[],_seen:new Set(),_sources:new Set()};
+    const r=rooms[record.room]??={room:record.room,names:[],adults:0,children:0,pax:0,pkg:'REVIEW',rates:[],sources:[],lines:[],evidence:[],issues:[],guestRows:0,countNotes:[],_seen:new Set(),_sources:new Set()};
     const key=[record.name.toLowerCase(),record.arrival,record.departure,record.adults,record.children,record.rate].join('|');
     if(r._sources.size&&!r._sources.has(report.source))r.issues.push('ห้องเดียวกันปรากฏในหลายไฟล์ กรุณาตรวจว่าซ้ำหรือคนละการจอง');
     r._sources.add(report.source);
-    if(!r._seen.has(key)){r._seen.add(key);if(!r.names.includes(record.name))r.names.push(record.name);r.adults+=Number.isFinite(record.adults)?record.adults:0;r.children+=Number.isFinite(record.children)?record.children:0;}
+    if(!r._seen.has(key)){r._seen.add(key);if(record.name.trim())r.guestRows++;if(!r.names.includes(record.name))r.names.push(record.name);r.adults+=Number.isFinite(record.adults)?record.adults:0;r.children+=Number.isFinite(record.children)?record.children:0;}
     else r.issues.push('พบแถวแขกซ้ำ ระบบไม่นับซ้ำ กรุณาตรวจ');
     r.lines.push(...(record.lines||[]).map(line=>({...line,source:report.source})));
     r.rates.push(record.rate);r.sources.push(`${report.source} · หน้า ${record.page}`);r.evidence.push(...record.evidence);
@@ -71,11 +71,12 @@ export function mergeReports(reports,serviceDate,rateMap={}){
     else if(serviceDate<record.arrival||serviceDate>record.departure)r.issues.push('วันที่บริการอยู่นอกช่วงพักในรายงาน');
   }
   for(const r of Object.values(rooms)){
-    r.pax=r.adults+r.children;const choices=new Set(r.evidence.map(e=>e.pkg));
+    r.reportedPax=r.adults+r.children;r.pax=Math.max(r.reportedPax,r.guestRows);const choices=new Set(r.evidence.map(e=>e.pkg));
     if(!choices.size)r.issues.push('ยังไม่มีหลักฐาน RO/RB กรุณาตรวจ Rate Code กับ FO');
     if(choices.size>1)r.issues.push('หลักฐาน RO และ RB ขัดกัน');
     if(r.pax<1||r.pax>50)r.issues.push('จำนวนผู้พักเป็น 0 หรือเกิน 50');
-    if(r.names.length>r.pax)r.issues.push('จำนวนชื่อมากกว่า Adl.+Chl. กรุณายืนยันจำนวนที่ถูกต้อง');
+    if(r.reportedPax===0)r.issues.push('ยอด Adl.+Chl. เป็น 0 กรุณาตรวจจำนวนผู้พัก');
+    if(r.guestRows>r.reportedPax)r.countNotes.push(`ใช้ ${r.pax} คนจาก ${r.guestRows} แถวรายชื่อ (Adl.+Chl. รวม ${r.reportedPax} คน)`);
     r.issues=[...new Set(r.issues)];r.rates=[...new Set(r.rates)];r.sources=[...new Set(r.sources)];
     r.evidence=[...new Map(r.evidence.map(e=>[JSON.stringify(e),e])).values()];
     r.detectedPkg=choices.size===1?[...choices][0]:null;r.pkg=r.issues.length?'REVIEW':r.detectedPkg;r.reviewReason='';

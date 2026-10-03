@@ -17,3 +17,14 @@ test('reads all room lines, wrapped names and comments continued onto next page 
  const pages=[ [...header(),...line(112,[['No.',10]]),...line(124,[['VIP',45],['EDT',365]]),...guest('1101','Guest Long',134),...line(144,[['Name,Mr.',45],['Company continuation',170]]),...line(154,[['Res. Comments: Reservation',90]]),...line(164,[['Long comment before page break',200]]),...line(200,[['Filter',10]])], [...header(),...line(112,[['No.',10]]),...line(124,[['VIP',45],['EDT',365]]),...line(134,[['2RB',200]]),...line(144,[['Second continuation',200]]),...guest('1102','Next Guest',164),...line(174,[['Res. Comments: Cashiering RO',90]]),...line(210,[['Total Rooms',10],['2',300],['4',430],['0',460]])] ];
  const result=parseReportPages(pages,'synthetic.pdf');assert.deepEqual(result.errors,[]);assert.equal(result.records[0].name,'Guest Long Name,Mr.');assert.equal(result.records[0].lines.length,6);assert.equal(result.records[0].evidence[0].pkg,'RB');assert.equal(result.records[0].evidence[0].page,2);assert.deepEqual(result.records[1].evidence.map(x=>x.pkg),['RO']);assert.ok(!result.records[1].lines.some(l=>l.text.includes('2RB')));const rooms=mergeReports([result],'2026-10-03');assert.equal(rooms['1101'].pkg,'RB');assert.equal(rooms['1102'].pkg,'RO');
 });
+test('sums every distinct repeated room row and uses companion rows when report occupancy is lower',()=>{
+ const r=mergeReports([report([record({adults:1,children:0}),record({name:'Guest Two',adults:0,children:0}),record({name:'Guest Three',adults:0,children:0,page:2})])],'2026-09-29')['1101'];
+ assert.equal(r.reportedPax,1);assert.equal(r.guestRows,3);assert.equal(r.pax,3);assert.equal(r.pkg,'RB');assert.equal(r.countNotes.length,1);
+ const sum=mergeReports([report([record(),record({name:'Another booking',adults:2,children:0})])],'2026-09-29')['1101'];assert.equal(sum.pax,5);assert.equal(sum.guestRows,2);
+});
+test('never adds zero-pax companion rows on top of a complete head-row total',()=>{
+ const r=mergeReports([report([record({adults:3,children:0}),record({name:'Two',adults:0,children:0}),record({name:'Three',adults:0,children:0})])],'2026-09-29')['1101'];assert.equal(r.pax,3);assert.equal(r.guestRows,3);assert.equal(r.countNotes.length,0);
+});
+test('overlapping PDF uploads remain reviewable without counting identical guest rows twice',()=>{
+ const r=mergeReports([report([record()]),report([record()], 'copy.pdf')],'2026-09-29')['1101'];assert.equal(r.pax,3);assert.equal(r.guestRows,1);assert.equal(r.pkg,'REVIEW');
+});

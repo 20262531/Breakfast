@@ -51,9 +51,9 @@ export function buildRoster(rows,map,mode){
       if(prev&&prev.pkg!==pkg)throw new Error('ห้องเดียวกันมี RO / RB ไม่ตรงกัน');
       const key=room+'|'+name.toLocaleLowerCase();
       if(mode==='guest'&&seen.has(key))throw new Error('ชื่อซ้ำในห้องเดียวกัน กรุณาตรวจต้นฉบับ');
-      if(mode==='room'&&prev)throw new Error('เลขห้องซ้ำ กรุณาเลือกหนึ่งแถวต่อแขก หรือรวมให้เหลือหนึ่งแถวต่อห้อง');
+      if(prev&&prev.pax+pax>50)throw new Error('จำนวนผู้พักรวมเกิน 50');
       seen.add(key);
-      if(prev){prev.names.push(name);prev.pax+=pax;if(prev.pax>50)throw new Error('จำนวนผู้พักรวมเกิน 50');}
+      if(prev){if(!prev.names.includes(name))prev.names.push(name);prev.pax+=pax;}
       else rooms[room]={room,names:[name],pax,pkg};
     }catch(e){errors.push('แถว '+(i+2)+': '+e.message);}
   });
