@@ -5,7 +5,7 @@ export function linesFromItems(items){
   }for(const line of lines){line.items.sort((a,b)=>a.x-b.x);line.text=line.items.map(x=>x.text).join(' ');}return lines;
 }
 function dateISO(s){const m=String(s).match(/^(\d{2})[-/](\d{2})[-/](\d{2}|\d{4})$/);return m?`${m[3].length===2?'20':''}${m[3]}-${m[2]}-${m[1]}`:null;}
-function tags(text){const result=[];for(const p of ['RO','RB'])if(new RegExp('(^|[^A-Z0-9])'+p+'(?=$|[^A-Z0-9])','i').test(text))result.push(p);return result;}
+export function packageTags(text){const result=[];for(const p of ['RO','RB'])if(new RegExp('(^|[^A-Z0-9])(?:\\d+\\s*)?R[ \t]*'+p[1]+'(?=$|[^A-Z0-9])','i').test(String(text)))result.push(p);return result;}
 function rateHint(rate){if(/RO(?:F|\*)?$/i.test(rate))return 'RO';if(/RB\*?$/i.test(rate))return 'RB';return null;}
 export function parseReportPages(pages,source){
   const records=[],dates=new Set(),errors=[],excluded=new Set();let current=null,commentSection=null,totals=null;
@@ -17,9 +17,10 @@ export function parseReportPages(pages,source){
     positions.Room=header.items.find(x=>x.text==='Room')?.x;
     if(Object.values(positions).some(x=>x===undefined)){errors.push(`หน้า ${index+1}: คอลัมน์ไม่ครบ`);continue;}
     const col=(line,start,end=Infinity)=>line.items.filter(x=>x.x>=start-1&&x.x<end-1).map(x=>x.text).join(' ').trim();
+    const bodyTop=Math.max(header.y+12,...lines.filter(l=>l.y>header.y&&l.y<header.y+35&&l.items.some(x=>['No.','VIP','Block Code','Source','EDT'].includes(x.text))).map(l=>l.y))+2;
     const footer=lines.find(l=>l.y>header.y+30&&/^Filter\b/.test(l.text));
     for(const line of lines){
-      if(line.y<header.y+35||(footer&&line.y>=footer.y))continue;
+      if(line.y<bodyTop||(footer&&line.y>=footer.y))continue;
       if(/Total Rooms/.test(line.text)){
         const nums=line.items.filter(x=>/^\d+$/.test(x.text)).map(x=>Number(x.text));
         if(nums.length>=3)totals={rooms:nums[0],adults:nums.at(-2),children:nums.at(-1)};
@@ -30,18 +31,19 @@ export function parseReportPages(pages,source){
         const room=roomItem.text,name=col(line,positions.Name,positions.Company).replace(/^\*+/,'').trim();
         const adultText=col(line,positions['Adl.'],positions['Chl.']),childText=col(line,positions['Chl.'],positions.Pay);
         const datesInRow=col(line,positions['Arr.'],positions['Adl.']).match(/\d{2}[-/]\d{2}[-/]\d{2,4}/g)||[];
-        const record={room,name,adults:Number(adultText),children:Number(childText),rate:col(line,positions.Rate),arrival:dateISO(datesInRow[0]),departure:dateISO(datesInRow[1]),source,page:index+1,evidence:[],issues:[]};
+        const record={room,name,adults:Number(adultText),children:Number(childText),rate:col(line,positions.Rate),arrival:dateISO(datesInRow[0]),departure:dateISO(datesInRow[1]),source,page:index+1,lines:[{page:index+1,text:line.text}],evidence:[],issues:[]};
         if(!/^\d+$/.test(adultText)||!/^\d+$/.test(childText))record.issues.push('อ่าน Adl./Chl. ไม่ครบ');
         if(!name)record.issues.push('ไม่พบชื่อแขก');
         const hint=rateHint(record.rate);if(hint)record.evidence.push({kind:'Rate Code',pkg:hint,code:record.rate});
         records.push(record);current=record;commentSection=null;
         if(!/^[1235][1-9]\d{2}$/.test(room))excluded.add(room);
       }else if(current){
-        const s=line.text;
+        const s=line.text;current.lines.push({page:index+1,text:s});
+        if(!commentSection&&Math.abs(line.items[0].x-positions.Name)<3){const continuation=col(line,positions.Name,positions.Company);if(continuation)current.name+=' '+continuation;}
         const match=s.match(/(?:Res\.\s*Comments:\s*)?(Cashiering|Reservation|General)(?:\s|$)/i);
         if(/Profile Notes:/i.test(s)){commentSection=null;continue;}
         if(match)commentSection=match[1][0].toUpperCase()+match[1].slice(1).toLowerCase();
-        if(commentSection){for(const pkg of tags(s))if(!current.evidence.some(x=>x.kind===commentSection&&x.pkg===pkg))current.evidence.push({kind:commentSection,pkg});}
+        if(commentSection){for(const pkg of packageTags(s))if(!current.evidence.some(x=>x.kind===commentSection&&x.pkg===pkg))current.evidence.push({kind:commentSection,pkg,text:s,page:index+1});}
       }
     }
   }
@@ -55,12 +57,13 @@ export function mergeReports(reports,serviceDate,rateMap={}){
   const rooms={};
   for(const report of reports)for(const record of report.records){
     if(!/^[1235][1-9]\d{2}$/.test(record.room))continue;
-    const r=rooms[record.room]??={room:record.room,names:[],adults:0,children:0,pax:0,pkg:'REVIEW',rates:[],sources:[],evidence:[],issues:[],_seen:new Set(),_sources:new Set()};
+    const r=rooms[record.room]??={room:record.room,names:[],adults:0,children:0,pax:0,pkg:'REVIEW',rates:[],sources:[],lines:[],evidence:[],issues:[],_seen:new Set(),_sources:new Set()};
     const key=[record.name.toLowerCase(),record.arrival,record.departure,record.adults,record.children,record.rate].join('|');
     if(r._sources.size&&!r._sources.has(report.source))r.issues.push('ห้องเดียวกันปรากฏในหลายไฟล์ กรุณาตรวจว่าซ้ำหรือคนละการจอง');
     r._sources.add(report.source);
     if(!r._seen.has(key)){r._seen.add(key);if(!r.names.includes(record.name))r.names.push(record.name);r.adults+=Number.isFinite(record.adults)?record.adults:0;r.children+=Number.isFinite(record.children)?record.children:0;}
     else r.issues.push('พบแถวแขกซ้ำ ระบบไม่นับซ้ำ กรุณาตรวจ');
+    r.lines.push(...(record.lines||[]).map(line=>({...line,source:report.source})));
     r.rates.push(record.rate);r.sources.push(`${report.source} · หน้า ${record.page}`);r.evidence.push(...record.evidence);
     if(rateMap[record.rate])r.evidence.push({kind:'รหัสที่ผู้ดูแลกำหนด',pkg:rateMap[record.rate],code:record.rate});
     r.issues.push(...record.issues);
@@ -75,7 +78,7 @@ export function mergeReports(reports,serviceDate,rateMap={}){
     if(r.names.length>r.pax)r.issues.push('จำนวนชื่อมากกว่า Adl.+Chl. กรุณายืนยันจำนวนที่ถูกต้อง');
     r.issues=[...new Set(r.issues)];r.rates=[...new Set(r.rates)];r.sources=[...new Set(r.sources)];
     r.evidence=[...new Map(r.evidence.map(e=>[JSON.stringify(e),e])).values()];
-    r.pkg=r.issues.length?'REVIEW':[...choices][0];r.reviewReason='';
+    r.detectedPkg=choices.size===1?[...choices][0]:null;r.pkg=r.issues.length?'REVIEW':r.detectedPkg;r.reviewReason='';
     delete r._seen;delete r._sources;
   }return rooms;
 }

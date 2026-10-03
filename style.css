@@ -82,3 +82,5 @@
 @media screen and (min-width:761px){.reception-page .backup-panel{display:none}}
 
 .day-management{margin:12px 0;padding:12px 16px;background:#f9f3df;border-radius:10px}.day-management summary{cursor:pointer;font-weight:600}.danger{color:#a33126;border-color:#d7a49f}#folder-backup-status{color:#53665b;font-size:14px}
+
+.room-source-lines{margin:8px 0!important;padding:8px!important}.room-source-lines summary{font-size:12px}.room-source-lines .pre{font-size:12px;overflow-wrap:anywhere;white-space:pre-wrap;margin-top:8px}

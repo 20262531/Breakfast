@@ -27,7 +27,7 @@ function findRoom(){
   const room=roomNumber($('#room').value);$('#room').value=room;updateRoomDescription();
   const r=currentState.day.rooms[room];if(!r)throw new Error('ไม่พบห้อง '+room+' ในรายงานวันนี้ กรุณาตรวจสอบกับ Front Office');
   if(!['RO','RB'].includes(r.pkg)){
-   $('#guest').innerHTML='<div class="guest-state hold"><span class="state-label">รอตรวจสอบกับ FO</span><div class="guest-room">'+room+'</div><p>ยังไม่ยืนยันสิทธิ์หรือจำนวนผู้พัก</p></div><div class="names">'+r.names.map(esc).join('<br>')+'</div><div class="notice">ให้ผู้ดูแลตรวจรายงานก่อนบันทึกเข้าทาน</div>';return;
+   $('#guest').innerHTML='<div class="guest-state hold"><span class="state-label">รอตรวจสอบข้อมูล</span><div class="guest-room">'+room+'</div><p>'+(r.detectedPkg?'อ่านสิทธิ์ '+esc(r.detectedPkg)+' แล้ว · กรุณาตรวจข้อมูลผู้พักในหน้านำเข้า':'ยังไม่ยืนยันสิทธิ์หรือจำนวนผู้พัก')+'</p></div><div class="names">'+r.names.map(esc).join('<br>')+'</div><div class="notice">ให้ผู้ดูแลตรวจรายงานก่อนบันทึกเข้าทาน</div>';return;
   }
   selected={room,expected:structuredClone(r),id:crypto.randomUUID()};
   const count=currentState.counts[room]?.count||0,remaining=Math.max(0,r.pax-count);
