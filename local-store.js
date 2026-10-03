@@ -18,7 +18,10 @@ export function validateBackupState(state){
   const ids=new Set(),counts={};
   for(const e of x.events){
    if(!plain(e)||typeof e.id!=='string'||!e.id||ids.has(e.id)||roomNumber(e.room)!==e.room||!Array.isArray(e.names)||!e.names.length||e.names.some(n=>typeof n!=='string'||n.length>300)||!Number.isInteger(e.pax)||e.pax<1||e.pax>50||!Number.isInteger(e.amount)||e.amount<0||e.amount>100000000||typeof e.staffEmail!=='string'||Number.isNaN(Date.parse(e.createdAt)))fail();
-   if(!(e.pkg==='RB'&&e.amount===0&&e.method==='')&&!(e.pkg==='RO'&&e.amount>0&&['cash','card','transfer'].includes(e.method)))fail();
+   if(e.paymentStatus!==undefined&&!['paid','pending'].includes(e.paymentStatus))fail();
+   if(e.paymentStatus==='pending'){if(e.pkg!=='RO'||e.amount!==0||e.method!==''||!Number.isInteger(e.dueAmount)||e.dueAmount<=0||e.dueAmount>100000000)fail();}
+   else if(!(e.pkg==='RB'&&e.amount===0&&e.method==='')&&!(e.pkg==='RO'&&e.amount>0&&['cash','card','transfer'].includes(e.method)))fail();
+   if(e.paymentStatus==='paid'&&e.dueAmount!==0)fail();
    ids.add(e.id);counts[e.room]=(counts[e.room]||0)+e.pax;
   }
   if(Object.keys(x.counts).length!==Object.keys(counts).length)fail();
@@ -58,12 +61,13 @@ export async function localStore(){
   async getRateRules(){return (await read()).rateRules;},
   async saveRateRules(mapping,version){await write(s=>{if(s.rateRules.version!==version)throw new Error('รหัสราคาเปลี่ยนแล้ว กรุณาอ่านใหม่');s.rateRules={mapping:clone(mapping),version:crypto.randomUUID()};});},
   async importDay(date,rooms,version){if(!validDate(date))throw new Error('วันที่ไม่ถูกต้อง');await write(s=>{const x=s.days[date]||{counts:{},events:[]};if((x.day?.version||null)!==version)throw new Error('มีการนำเข้าข้อมูลใหม่ กรุณาตรวจใหม่');x.day={rooms:clone(rooms),version:crypto.randomUUID(),uploadedBy:store.user.uid,uploadedAt:new Date().toISOString()};s.days[date]=x;});},
-  async checkin(date,room,pax,amount,method,id,expected){await write(s=>{
+  async checkin(date,room,pax,amount,method,id,expected,payment=null){await write(s=>{
    if(date!==today())throw new Error('เปลี่ยนวันแล้ว กรุณาค้นหาใหม่');const x=s.days[date];if(!x)throw new Error('ยังไม่มีรายงานของวันนี้');if(x.events.some(e=>e.id===id))return;
-   const r=x.day.rooms[room];if(JSON.stringify(r)!==JSON.stringify(expected))throw new Error('ข้อมูลห้องเปลี่ยน กรุณาค้นหาใหม่');roomNumber(room);validateEntry(r,x.counts[room]?.count||0,pax,amount,method);
+   const r=x.day.rooms[room];if(JSON.stringify(r)!==JSON.stringify(expected))throw new Error('ข้อมูลห้องเปลี่ยน กรุณาค้นหาใหม่');roomNumber(room);validateEntry(r,x.counts[room]?.count||0,pax,amount,method,payment?.status||'paid',payment?.dueAmount||0);
    if(r.pkg==='RB'&&(amount!==0||method!==''))throw new Error('RB ต้องไม่มียอดรับชำระ');
-   x.counts[room]={count:(x.counts[room]?.count||0)+pax,lastEvent:id};x.events.push({id,room,names:clone(r.names),pkg:r.pkg,pax,amount,method,staffEmail:store.user.email,createdAt:new Date().toISOString()});
+   x.counts[room]={count:(x.counts[room]?.count||0)+pax,lastEvent:id};x.events.push({id,room,names:clone(r.names),pkg:r.pkg,pax,amount,method,staffEmail:store.user.email,createdAt:new Date().toISOString(),...(payment?{paymentStatus:payment.status,dueAmount:payment.dueAmount}:{} )});
   });},
+  async settlePayment(date,id,method){if(!validDate(date)||!['cash','card','transfer'].includes(method))throw new Error('วันที่หรือวิธีรับเงินไม่ถูกต้อง');await write(s=>{const e=s.days[date]?.events.find(e=>e.id===id);if(!e)throw new Error('ไม่พบรายการ อาจถูกล้างแล้ว');if(e.paymentStatus!=='pending')return;if(e.pkg!=='RO'||!Number.isInteger(e.dueAmount)||e.dueAmount<=0)throw new Error('ยอดค้างไม่ถูกต้อง');e.amount=e.dueAmount;e.dueAmount=0;e.paymentStatus='paid';e.method=method;e.settledAt=new Date().toISOString();e.settledBy=store.user.email;});},
   async status(){const s=await read();return {revision:s.revision,changedAt:s.changedAt,dirty:!!s.revision&&s.revision!==s.backupRevision,backupAt:s.backupAt,days:Object.keys(s.days).length,events:Object.values(s.days).reduce((n,x)=>n+x.events.length,0)};},
   async exportBackup(){const state=await read();const payload={format:'LAYA_BREAKFAST_LOCAL',schema:1,exportedAt:new Date().toISOString(),state,checksum:await digest(state)};return {text:JSON.stringify(payload),revision:state.revision};},
   async markBackup(revision){await transaction('readwrite',s=>{s.backupRevision=revision;s.backupAt=new Date().toISOString();return null;});},

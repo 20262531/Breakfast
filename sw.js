@@ -1,5 +1,5 @@
 const PREFIX='laya-breakfast-local-'+encodeURIComponent(self.registration.scope)+'-';
-const CACHE=PREFIX+'v2.7.0';
+const CACHE=PREFIX+'v2.8.0';
 const ASSETS=["./", "./index.html", "./app.js", "./auto-backup.js", "./style.css", "./domain.js", "./local-store.js", "./phase-reports.js", "./store.js", "./pdf-import.js", "./pdf-workflow.js", "./icon.svg", "./manifest.webmanifest", "./sample-guests.csv", "./fonts/noto-sans-thai-thai-400-normal.woff2", "./fonts/noto-sans-thai-thai-600-normal.woff2", "./vendor/xlsx.full.min.js", "./vendor/pdfjs/pdf.min.mjs", "./vendor/pdfjs/pdf.worker.min.mjs"];
 self.addEventListener('install',e=>e.waitUntil((async()=>{const cache=await caches.open(CACHE);await cache.addAll(ASSETS.map(url=>new Request(url,{cache:'reload'})));await self.skipWaiting();})()));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith(PREFIX)&&key!==CACHE)await caches.delete(key);await self.clients.claim();})()));

@@ -61,10 +61,14 @@ export function buildRoster(rows,map,mode){
   if(new TextEncoder().encode(JSON.stringify(rooms)).length>700000)errors.push('ข้อมูลเกินขนาด 700 KB กรุณาลดคอลัมน์ชื่อหรือแบ่งข้อมูล');
   return {rooms,errors,skipped};
 }
-export function validateEntry(room,count,pax,amount,method){
+export function validateEntry(room,count,pax,amount,method,paymentStatus='paid',dueAmount=0){
   if(!room)throw new Error('ไม่พบห้องในข้อมูลประจำวัน');
   if(!Number.isInteger(pax)||pax<1||pax+count>room.pax)throw new Error('จำนวนเข้าทานเกินผู้พักหรือมีเครื่องอื่นบันทึกแล้ว กรุณาค้นหาใหม่');
-  if(room.pkg==='RO'&&(!Number.isInteger(amount)||amount<=0||amount>100000000||!['cash','card','transfer'].includes(method)))throw new Error('กรุณาระบุยอดรับชำระและวิธีชำระ');
+  if(paymentStatus==='paid'&&dueAmount!==0)throw new Error('ยอดค้างของรายการชำระแล้วต้องเป็นศูนย์');
+  if(room.pkg==='RB'&&(amount!==0||method!==''))throw new Error('RB ต้องไม่มียอดรับชำระ');
+  if(!['paid','pending'].includes(paymentStatus))throw new Error('สถานะรับเงินไม่ถูกต้อง');
+  if(paymentStatus==='pending'&&(room.pkg!=='RO'||amount!==0||method!==''||!Number.isInteger(dueAmount)||dueAmount<=0||dueAmount>100000000))throw new Error('กรุณาระบุยอดค้างชำระของ RO');
+  if(room.pkg==='RO'&&paymentStatus==='paid'&&(!Number.isInteger(amount)||amount<=0||amount>100000000||!['cash','card','transfer'].includes(method)))throw new Error('กรุณาระบุยอดรับชำระและวิธีชำระ');
   if(!['RO','RB'].includes(room.pkg))throw new Error('แพ็กเกจไม่ชัดเจน กรุณาตรวจรายงาน');
 }
 export function csvCell(value){let s=String(value??'');if(/^[\s]*[=+@-]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"';}
