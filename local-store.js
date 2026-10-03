@@ -17,12 +17,12 @@ export function validateBackupState(state){
   }
   const ids=new Set(),counts={};
   for(const e of x.events){
-   if(!plain(e)||typeof e.id!=='string'||!e.id||ids.has(e.id)||roomNumber(e.room)!==e.room||!Array.isArray(e.names)||!e.names.length||e.names.some(n=>typeof n!=='string'||n.length>300)||!Number.isInteger(e.pax)||e.pax<1||e.pax>50||!Number.isInteger(e.amount)||e.amount<0||e.amount>100000000||typeof e.staffEmail!=='string'||Number.isNaN(Date.parse(e.createdAt)))fail();
+   if(!plain(e)||typeof e.id!=='string'||!e.id||ids.has(e.id)||roomNumber(e.room)!==e.room||!Array.isArray(e.names)||!e.names.length||e.names.some(n=>typeof n!=='string'||n.length>300)||!Number.isSafeInteger(e.pax)||e.pax<1||!Number.isInteger(e.amount)||e.amount<0||e.amount>100000000||typeof e.staffEmail!=='string'||Number.isNaN(Date.parse(e.createdAt)))fail();
    if(e.paymentStatus!==undefined&&!['paid','pending'].includes(e.paymentStatus))fail();
    if(e.paymentStatus==='pending'){if(e.pkg!=='RO'||e.amount!==0||e.method!==''||!Number.isInteger(e.dueAmount)||e.dueAmount<=0||e.dueAmount>100000000)fail();}
    else if(!(e.pkg==='RB'&&e.amount===0&&e.method==='')&&!(e.pkg==='RO'&&e.amount>0&&['cash','card','transfer'].includes(e.method)))fail();
    if(e.paymentStatus==='paid'&&e.dueAmount!==0)fail();
-   ids.add(e.id);counts[e.room]=(counts[e.room]||0)+e.pax;
+   ids.add(e.id);counts[e.room]=(counts[e.room]||0)+e.pax;if(!Number.isSafeInteger(counts[e.room]))fail();
   }
   if(Object.keys(x.counts).length!==Object.keys(counts).length)fail();
   for(const [room,n] of Object.entries(counts))if(!plain(x.counts[room])||x.counts[room].count!==n)fail();

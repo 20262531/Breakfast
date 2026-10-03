@@ -63,7 +63,7 @@ export function buildRoster(rows,map,mode){
 }
 export function validateEntry(room,count,pax,amount,method,paymentStatus='paid',dueAmount=0){
   if(!room)throw new Error('ไม่พบห้องในข้อมูลประจำวัน');
-  if(!Number.isInteger(pax)||pax<1||pax+count>room.pax)throw new Error('จำนวนเข้าทานเกินผู้พักหรือมีเครื่องอื่นบันทึกแล้ว กรุณาค้นหาใหม่');
+  if(!Number.isSafeInteger(pax)||pax<1||!Number.isSafeInteger(pax+count))throw new Error('จำนวนเข้าทานต้องเป็นจำนวนเต็มมากกว่า 0');
   if(paymentStatus==='paid'&&dueAmount!==0)throw new Error('ยอดค้างของรายการชำระแล้วต้องเป็นศูนย์');
   if(room.pkg==='RB'&&(amount!==0||method!==''))throw new Error('RB ต้องไม่มียอดรับชำระ');
   if(!['paid','pending'].includes(paymentStatus))throw new Error('สถานะรับเงินไม่ถูกต้อง');
