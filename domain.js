@@ -78,3 +78,19 @@ export function makeWalkinEvent({id,name='',phase=1,pax,amount,method,paymentSta
  validateEntry({pkg:'RO'},0,pax,paymentStatus==='pending'?0:amount,paymentStatus==='pending'?'':method,paymentStatus,paymentStatus==='pending'?amount:0);
  return {id,room:'',names:[name.trim()||'Walk-in'],pkg:'WALKIN',phase,pax,amount:paymentStatus==='pending'?0:amount,method:paymentStatus==='pending'?'':method,paymentStatus,dueAmount:paymentStatus==='pending'?amount:0,staffEmail,createdAt:new Date().toISOString()};
 }
+export function auditChange(day,before,after,staffEmail,action){
+ (day.audit??=[]).push({id:crypto.randomUUID(),eventId:before.id,action,at:new Date().toISOString(),staffEmail,before:structuredClone(before),after:after?structuredClone(after):null});
+}
+export function reviseEvent(day,id,input,expected,staffEmail,action='edit'){
+ const index=day?.events.findIndex(e=>e.id===id);if(index===undefined||index<0)throw new Error('ไม่พบรายการ อาจถูกยกเลิกแล้ว');const old=day.events[index];
+ if(JSON.stringify(old)!==JSON.stringify(expected))throw new Error('รายการเปลี่ยนแล้ว กรุณาปิดและเปิดแก้ไขใหม่');
+ if(!['edit','cancel'].includes(action))throw new Error('คำสั่งไม่ถูกต้อง');let next=null;
+ if(action==='edit'){
+  if(old.pkg==='WALKIN')next=makeWalkinEvent({...input,id},old.staffEmail);
+  else{const room=roomNumber(input.room),r=day.day.rooms[room];if(!r||!['RB','RO'].includes(r.pkg))throw new Error('ห้องใหม่ต้องมี RO/RB ที่ยืนยันแล้วในรายงานวันนั้น');const status=r.pkg==='RB'?'paid':input.paymentStatus;const pending=status==='pending';validateEntry(r,0,input.pax,r.pkg==='RB'||pending?0:input.amount,r.pkg==='RB'||pending?'':input.method,status,pending?input.amount:0);next={id,room,names:structuredClone(r.names),pkg:r.pkg,pax:input.pax,amount:r.pkg==='RB'||pending?0:input.amount,method:r.pkg==='RB'||pending?'':input.method,paymentStatus:status,dueAmount:pending?input.amount:0};}
+  next={...next,createdAt:old.createdAt,staffEmail:old.staffEmail,updatedAt:new Date().toISOString(),updatedBy:staffEmail};
+  if(next.pkg!=='RB'&&next.paymentStatus==='paid'){const unchanged=old.paymentStatus!=='pending'&&old.amount===next.amount&&old.method===next.method&&old.pkg===next.pkg;if(unchanged&&old.settledAt){next.settledAt=old.settledAt;next.settledBy=old.settledBy;}else if(!unchanged){next.settledAt=next.updatedAt;next.settledBy=staffEmail;}}
+ }
+ const events=day.events.filter((e,i)=>i!==index);if(next)events.splice(index,0,next);const counts={};for(const e of events)if(e.pkg!=='WALKIN'){const n=(counts[e.room]?.count||0)+e.pax;if(!Number.isSafeInteger(n))throw new Error('ยอดจำนวนคนเกินขนาด');counts[e.room]={count:n,lastEvent:e.id};}
+ auditChange(day,old,next,staffEmail,action);day.events=events;day.counts=counts;return next;
+}
