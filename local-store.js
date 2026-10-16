@@ -1,4 +1,4 @@
-import {today,roomNumber,validateEntry,makeWalkinEvent,reviseEvent,auditChange} from './domain.js';
+import {today,roomNumber,validateEntry,makeWalkinEvent,reviseEvent,auditChange,confirmRoom} from './domain.js';
 const DB='laya-breakfast-local-v1', KEY='state';
 const empty=()=>({days:{},rateRules:{mapping:{},version:null},revision:null,changedAt:null,backupRevision:null,backupAt:null});
 const clone=x=>structuredClone(x);
@@ -15,6 +15,7 @@ export function validateBackupState(state){
   for(const [room,r] of Object.entries(x.day.rooms)){
    if(roomNumber(room)!==room||!plain(r)||r.room!==room||!Array.isArray(r.names)||r.names.length<1||r.names.length>50||r.names.some(n=>typeof n!=='string'||!n.trim()||n.length>300)||!Number.isInteger(r.pax)||r.pax<0||r.pax>50||!['RO','RB','REVIEW'].includes(r.pkg)||(r.pkg!=='REVIEW'&&r.pax===0))fail();
   }
+  if(x.rosterAudit!==undefined){if(!Array.isArray(x.rosterAudit)||x.rosterAudit.length>100000)fail();for(const a of x.rosterAudit){if(!plain(a)||typeof a.id!=='string'||a.room!==roomNumber(a.room)||!plain(a.before)||!plain(a.after)||!['RO','RB'].includes(a.after.pkg)||typeof a.staffEmail!=='string'||Number.isNaN(Date.parse(a.at)))fail();}}
   if(x.audit!==undefined){if(!Array.isArray(x.audit)||x.audit.length>100000)fail();const auditIds=new Set();for(const a of x.audit){if(!plain(a)||typeof a.id!=='string'||!a.id||auditIds.has(a.id)||!['edit','cancel','settle'].includes(a.action)||typeof a.staffEmail!=='string'||Number.isNaN(Date.parse(a.at))||!plain(a.before)||a.eventId!==a.before.id||(a.action==='cancel'?a.after!==null:!plain(a.after)||a.after.id!==a.eventId))fail();auditIds.add(a.id);for(const e of [a.before,a.after].filter(Boolean)){const counts=e.pkg==='WALKIN'?{}:{[e.room]:{count:e.pax}};validateBackupState({days:{[date]:{day:{rooms:{},version:'audit-check'},counts,events:[e]}},rateRules:{mapping:{}}});}}}
   const ids=new Set(),counts={};
   for(const e of x.events){
@@ -48,13 +49,13 @@ export async function localStore(){
   tx.oncomplete=()=>resolve(clone(result));tx.onabort=()=>reject(problem||tx.error||new Error('บันทึกไม่สำเร็จ'));tx.onerror=()=>{};
  });}
  const read=()=>transaction('readonly',s=>s);
- async function emit(){const state=await read();for(const {date,cb} of listeners){const x=state.days[date]||{};cb({day:x.day||null,counts:x.counts||{},events:x.events||[],audit:x.audit||[],fresh:true});}}
+ async function emit(){const state=await read();for(const {date,cb} of listeners){const x=state.days[date]||{};cb({day:x.day||null,counts:x.counts||{},events:x.events||[],audit:x.audit||[],rosterAudit:x.rosterAudit||[],fresh:true});}}
  if(channel)channel.onmessage=()=>emit().catch(console.error);
  const changed=s=>{s.revision=crypto.randomUUID();s.changedAt=new Date().toISOString();};
  async function write(fn){const out=await transaction('readwrite',(s,bucket)=>{const result=fn(s);changed(s);bucket.put(clone(s),'auto-backup');return result;});await emit();channel?.postMessage('changed');return out;}
  const setting=(mode,key,value)=>new Promise((resolve,reject)=>{const tx=db.transaction('data',mode),bucket=tx.objectStore('data');const q=mode==='readonly'?bucket.get(key):bucket.put(value,key);let result;q.onsuccess=()=>result=q.result;tx.oncomplete=()=>resolve(result);tx.onabort=()=>reject(tx.error);tx.onerror=()=>{};});
  const store={local:true,demo:false,user:{uid:'local-notebook',email:'โน้ตบุ๊กห้องอาหาร',role:'admin'},
-  watch(date,cb,error){const listener={date,cb};listeners.add(listener);read().then(s=>{if(!listeners.has(listener))return;const x=s.days[date]||{};cb({day:x.day||null,counts:x.counts||{},events:x.events||[],audit:x.audit||[],fresh:true});}).catch(error||console.error);return()=>listeners.delete(listener);},
+  watch(date,cb,error){const listener={date,cb};listeners.add(listener);read().then(s=>{if(!listeners.has(listener))return;const x=s.days[date]||{};cb({day:x.day||null,counts:x.counts||{},events:x.events||[],audit:x.audit||[],rosterAudit:x.rosterAudit||[],fresh:true});}).catch(error||console.error);return()=>listeners.delete(listener);},
   async getBackupFolder(){return setting('readonly','backup-folder');},
   async setBackupFolder(handle){await setting('readwrite','backup-folder',handle);},
   async getAutoSnapshot(){return setting('readonly','auto-backup');},
@@ -62,7 +63,8 @@ export async function localStore(){
   async getDay(date){return (await read()).days[date]?.day||null;},
   async getRateRules(){return (await read()).rateRules;},
   async saveRateRules(mapping,version){await write(s=>{if(s.rateRules.version!==version)throw new Error('รหัสราคาเปลี่ยนแล้ว กรุณาอ่านใหม่');s.rateRules={mapping:clone(mapping),version:crypto.randomUUID()};});},
-  async importDay(date,rooms,version){if(!validDate(date))throw new Error('วันที่ไม่ถูกต้อง');await write(s=>{const x=s.days[date]||{counts:{},events:[]};if((x.day?.version||null)!==version)throw new Error('มีการนำเข้าข้อมูลใหม่ กรุณาตรวจใหม่');x.day={rooms:clone(rooms),version:crypto.randomUUID(),uploadedBy:store.user.uid,uploadedAt:new Date().toISOString()};s.days[date]=x;});},
+  async importDay(date,rooms,version){if(!validDate(date))throw new Error('วันที่ไม่ถูกต้อง');await write(s=>{const x=s.days[date]||{counts:{},events:[]};if((x.day?.version||null)!==version)throw new Error('มีการนำเข้าข้อมูลใหม่ กรุณาตรวจใหม่');const merged=clone(rooms);for(const [room,previous] of Object.entries(x.day?.rooms||{})){if(previous.manualConfirmed&&merged[room])merged[room]=clone(previous);}x.day={rooms:merged,version:crypto.randomUUID(),uploadedBy:store.user.uid,uploadedAt:new Date().toISOString()};s.days[date]=x;});},
+  async confirmRoom(date,room,input,expected){if(date!==today())throw new Error('เปลี่ยนวันแล้ว กรุณาค้นหาใหม่');await write(s=>{const x=s.days[date];if(!x?.day?.rooms?.[room])throw new Error('ไม่พบห้อง');const {before,after}=confirmRoom(x.day,room,input,expected,store.user.email);(x.rosterAudit??=[]).push({id:crypto.randomUUID(),room,at:new Date().toISOString(),staffEmail:store.user.email,before,after});});},
   async checkin(date,room,pax,amount,method,id,expected,payment=null){await write(s=>{
    if(date!==today())throw new Error('เปลี่ยนวันแล้ว กรุณาค้นหาใหม่');const x=s.days[date];if(!x)throw new Error('ยังไม่มีรายงานของวันนี้');if(x.events.some(e=>e.id===id))return;
    const r=x.day.rooms[room];if(JSON.stringify(r)!==JSON.stringify(expected))throw new Error('ข้อมูลห้องเปลี่ยน กรุณาค้นหาใหม่');roomNumber(room);validateEntry(r,x.counts[room]?.count||0,pax,amount,method,payment?.status||'paid',payment?.dueAmount||0);

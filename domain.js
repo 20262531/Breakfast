@@ -94,3 +94,14 @@ export function reviseEvent(day,id,input,expected,staffEmail,action='edit'){
  const events=day.events.filter((e,i)=>i!==index);if(next)events.splice(index,0,next);const counts={};for(const e of events)if(e.pkg!=='WALKIN'){const n=(counts[e.room]?.count||0)+e.pax;if(!Number.isSafeInteger(n))throw new Error('ยอดจำนวนคนเกินขนาด');counts[e.room]={count:n,lastEvent:e.id};}
  auditChange(day,old,next,staffEmail,action);day.events=events;day.counts=counts;return next;
 }
+
+// Manual roster confirmation is separate from check-in event changes.
+export function confirmRoom(day,room,input,expected,staffEmail){
+ const old=day?.rooms?.[room];if(!old||JSON.stringify(old)!==JSON.stringify(expected))throw new Error('ข้อมูลห้องถูกเปลี่ยน กรุณาค้นหาใหม่');
+ if(!['RO','RB'].includes(input.pkg))throw new Error('กรุณาเลือก RO หรือ RB');
+ const names=String(input.names||'').split(/\n/).map(x=>x.trim()).filter(Boolean);
+ if(!names.length||names.length>50||names.some(n=>n.length>300))throw new Error('กรุณาระบุชื่อแขก (สูงสุด 50 ชื่อ)');
+ const pax=Number(input.pax);if(!Number.isInteger(pax)||pax<1||pax>50)throw new Error('จำนวนผู้พักต้องอยู่ระหว่าง 1–50');
+ const after={...structuredClone(old),room,names,pax,pkg:input.pkg,manualConfirmed:true,confirmedAt:new Date().toISOString(),confirmedBy:staffEmail};
+ day.rooms[room]=after;return {before:structuredClone(old),after:structuredClone(after)};
+}

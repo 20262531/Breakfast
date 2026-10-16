@@ -28,7 +28,7 @@ function findRoom(){
   const room=roomNumber($('#room').value);$('#room').value=room;updateRoomDescription();
   const r=currentState.day.rooms[room];if(!r)throw new Error('ไม่พบห้อง '+room+' ในรายงานวันนี้ กรุณาตรวจสอบกับ Front Office');
   if(!['RO','RB'].includes(r.pkg)){
-   $('#guest').innerHTML='<div class="guest-state hold"><span class="state-label">รอตรวจสอบข้อมูล</span><div class="guest-room">'+room+'</div><p>'+(r.detectedPkg?'อ่านสิทธิ์ '+esc(r.detectedPkg)+' แล้ว · กรุณาตรวจข้อมูลผู้พักในหน้านำเข้า':'ยังไม่ยืนยันสิทธิ์หรือจำนวนผู้พัก')+'</p></div><div class="names">'+r.names.map(esc).join('<br>')+'</div><div class="notice">ให้ผู้ดูแลตรวจรายงานก่อนบันทึกเข้าทาน</div>';return;
+   $('#guest').innerHTML='<div class="guest-state hold"><span class="state-label">รอตรวจสอบข้อมูล</span><div class="guest-room">'+room+'</div><p>'+(r.detectedPkg?'อ่านสิทธิ์ '+esc(r.detectedPkg)+' แล้ว · กรุณาตรวจข้อมูลผู้พักในหน้านำเข้า':'ยังไม่ยืนยันสิทธิ์หรือจำนวนผู้พัก')+'</p></div><div class="names">'+r.names.map(esc).join('<br>')+'</div><div class="notice">ยืนยันข้อมูลกับแขกหรือ Front Office ก่อนเปลี่ยนสิทธิ์</div><button class="primary full" type="button" id="confirm-roster-open">แก้ไขข้อมูลแขก · ยืนยัน RO / RB</button>';$('#confirm-roster-open').addEventListener('click',()=>openRosterConfirm(room));return;
   }
   selected={room,expected:structuredClone(r),id:crypto.randomUUID()};
   const count=currentState.counts[room]?.count||0,remaining=Math.max(0,r.pax-count);
@@ -44,9 +44,28 @@ function findRoom(){
    $('#pax-plus').addEventListener('click',()=>{$('#pax').value=(Number($('#pax').value)||1)+1;sync();});
    document.querySelectorAll('[data-pax]').forEach(b=>b.addEventListener('click',()=>{$('#pax').value=b.dataset.pax;sync();}));$('#pax').addEventListener('input',sync);$('#pax').addEventListener('keydown',e=>{if(e.key==='Enter'&&e.repeat)e.preventDefault();});sync();
   }
+  const overrideButton=document.createElement('button');overrideButton.type='button';overrideButton.className='roster-correction';overrideButton.textContent='แก้ไขชื่อ / จำนวนผู้พัก / สิทธิ์ RO–RB';overrideButton.addEventListener('click',()=>openRosterConfirm(room));$('#guest').append(overrideButton);
   connection();
  }catch(e){$('#guest').innerHTML='<div class="guest-state payment" role="alert"><span class="state-label">ตรวจสอบเลขห้อง</span><p>'+esc(errorMessage(e))+'</p></div>';}
 }
+function openRosterConfirm(room){
+ if(busy)return;const r=currentState.day?.rooms?.[room];if(!r)return;
+ $('#roster-room').textContent='ห้อง '+room+' · เข้าทานแล้ว '+(currentState.counts[room]?.count||0)+' คน';
+ $('#roster-names').value=(r.names||[]).join('\n');$('#roster-pax').value=Math.max(1,r.pax||r.names?.length||1);
+ $('#roster-pkg').value=['RO','RB'].includes(r.pkg)?r.pkg:(['RO','RB'].includes(r.detectedPkg)?r.detectedPkg:'');
+ $('#roster-confirm-check').checked=false;$('#roster-confirm-save').disabled=false;
+ $('#roster-dialog').dataset.room=room;$('#roster-dialog').dataset.snapshot=JSON.stringify(r);$('#roster-dialog').showModal();
+}
+$('#roster-confirm-close').addEventListener('click',()=>$('#roster-dialog').close());
+$('#roster-form').addEventListener('submit',async e=>{
+ e.preventDefault();if(busy)return;busy=true;$('#roster-confirm-save').disabled=true;
+ try{requireOnline();const dialog=$('#roster-dialog'),room=dialog.dataset.room,expected=JSON.parse(dialog.dataset.snapshot);
+ if(!$('#roster-pkg').value)throw new Error('กรุณาเลือกสิทธิ์ RO / RB หลังตรวจสอบกับแขกหรือ Front Office');
+ if(!$('#roster-confirm-check').checked)throw new Error('กรุณายืนยันว่าตรวจสอบข้อมูลแล้ว');
+ await store.confirmRoom(serviceDate,room,{names:$('#roster-names').value,pax:Number($('#roster-pax').value),pkg:$('#roster-pkg').value},expected);
+ dialog.close();busy=false;$('#room').value=room;findRoom();message('บันทึกข้อมูลห้อง '+room+' แล้ว · เก็บประวัติเดิมไว้');
+ }catch(err){failure(err);}finally{busy=false;$('#roster-confirm-save').disabled=false;connection();}
+});
 function updateRoomDescription(){
  const value=$('#room').value.toUpperCase();let text='ใส่เลขห้องแล้ว Enter · RB ระบุจำนวน / RO ชำระเงิน';
  try{if(value.length===4){const room=roomNumber(value);text='ตึก '+buildings[room[0]]+' · ชั้น '+room[1]+' · ห้อง '+room.slice(2);}else if(buildings[value[0]])text='ตึก '+buildings[value[0]]+' · ใส่เลขที่เหลือ';}catch{text='รับเฉพาะตึก 1, 2, 3, 5 หรือ A, B, C, D';}
@@ -186,7 +205,8 @@ $('#walkin-form').addEventListener('submit',saveWalkin);$('#walkin-pending').add
 
 let editing=null;
 function auditSummary(e){if(!e)return 'ยกเลิกแล้ว · ไม่นับยอด';return eventRoom(e)+' / '+eventBuilding(e)+' · '+e.names.join(' / ')+' · '+e.pax+' คน · '+e.pkg+' · '+(e.paymentStatus==='pending'?'รอชำระ '+money(e.dueAmount):'รับแล้ว '+money(e.amount))+(e.method?' · '+({cash:'เงินสด',card:'บัตรเครดิต',transfer:'โอนเงิน'}[e.method]||e.method):'');}
-function renderEditAudit(){const list=historyState.audit||[];$('#edit-audit').hidden=!list.length;$('#edit-audit-body').innerHTML=[...list].reverse().map(a=>'<article><strong>'+({edit:'แก้ไข',cancel:'ยกเลิกรายการ',settle:'รับชำระยอดค้าง'}[a.action]||a.action)+' · '+esc(new Date(a.at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))+'</strong><small> · '+esc(a.staffEmail)+'</small><p>ก่อน: '+esc(auditSummary(a.before))+'</p><p>หลัง: '+esc(auditSummary(a.after))+'</p></article>').join('');}
+function rosterAuditSummary(room,r){return room+' · '+r.names.join(' / ')+' · '+r.pax+' คน · '+r.pkg;}
+function renderEditAudit(){const rosterChanges=(historyState.rosterAudit||[]).map(a=>({action:'roster',at:a.at,staffEmail:a.staffEmail,before:a.before,after:a.after,room:a.room}));const list=[...(historyState.audit||[]),...rosterChanges].sort((a,b)=>new Date(a.at)-new Date(b.at));$('#edit-audit').hidden=!list.length;$('#edit-audit-body').innerHTML=[...list].reverse().map(a=>'<article><strong>'+({edit:'แก้ไข',cancel:'ยกเลิกรายการ',settle:'รับชำระยอดค้าง',roster:'ยืนยันข้อมูลแขก'}[a.action]||a.action)+' · '+esc(new Date(a.at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}))+'</strong><small> · '+esc(a.staffEmail)+'</small><p>ก่อน: '+esc(a.action==='roster'?rosterAuditSummary(a.room,a.before):auditSummary(a.before))+'</p><p>หลัง: '+esc(a.action==='roster'?rosterAuditSummary(a.room,a.after):auditSummary(a.after))+'</p></article>').join('');}
 function syncEdit(){if(!editing)return;let pkg=editing.expected.pkg;if(pkg!=='WALKIN'){try{const r=editing.roster?.rooms[roomNumber($('#edit-room').value)];if(!r||!['RB','RO'].includes(r.pkg))throw new Error();pkg=r.pkg;$('#edit-guest').textContent=r.names.join('\n')+' · '+pkg;}catch{$('#edit-guest').textContent='เลือกห้องที่มี RO/RB ในรายงานวันนั้น';}}
  const rb=pkg==='RB';$('#edit-payment').hidden=rb;$('#edit-amount').required=!rb;$('#edit-amount').disabled=rb;$('#edit-status').disabled=rb;$('#edit-method').disabled=rb||$('#edit-status').value==='pending';}
 $('#history-body').addEventListener('click',async e=>{const button=e.target.closest('[data-edit],[data-cancel-entry]');if(!button||busy)return;const id=button.dataset.edit||button.dataset.cancelEntry,event=historyState.events.find(x=>x.id===id);if(!event)return;const date=$('#history-date').value,expected=structuredClone(event);
