@@ -1,3 +1,5 @@
+import {hasConditionalPackageComment,minimizePackageComment} from './package-review.js';
+
 // Coordinates are taken from each page's column headers, not a fixed text offset.
 export function linesFromItems(items){
   const lines=[];for(const item of [...items].filter(x=>x.text.trim()).sort((a,b)=>a.y-b.y||a.x-b.x)){
@@ -31,7 +33,7 @@ export function parseReportPages(pages,source){
         const room=roomItem.text,name=col(line,positions.Name,positions.Company).replace(/^\*+/,'').trim();
         const adultText=col(line,positions['Adl.'],positions['Chl.']),childText=col(line,positions['Chl.'],positions.Pay);
         const datesInRow=col(line,positions['Arr.'],positions['Adl.']).match(/\d{2}[-/]\d{2}[-/]\d{2,4}/g)||[];
-        const record={room,name,adults:Number(adultText),children:Number(childText),rate:col(line,positions.Rate),arrival:dateISO(datesInRow[0]),departure:dateISO(datesInRow[1]),source,page:index+1,lines:[{page:index+1,text:line.text}],evidence:[],issues:[]};
+        const record={room,name,adults:Number(adultText),children:Number(childText),rate:col(line,positions.Rate),arrival:dateISO(datesInRow[0]),departure:dateISO(datesInRow[1]),source,page:index+1,lines:[{page:index+1,text:line.text}],evidence:[],issues:[],packageComments:[]};
         if(!/^\d+$/.test(adultText)||!/^\d+$/.test(childText))record.issues.push('อ่าน Adl./Chl. ไม่ครบ');
         if(!name)record.issues.push('ไม่พบชื่อแขก');
         const hint=rateHint(record.rate);if(hint)record.evidence.push({kind:'Rate Code',pkg:hint,code:record.rate});
@@ -43,7 +45,17 @@ export function parseReportPages(pages,source){
         const match=s.match(/(?:Res\.\s*Comments:\s*)?(Cashiering|Reservation|General)(?:\s|$)/i);
         if(/Profile Notes:/i.test(s)){commentSection=null;continue;}
         if(match)commentSection=match[1][0].toUpperCase()+match[1].slice(1).toLowerCase();
-        if(commentSection){for(const pkg of packageTags(s))if(!current.evidence.some(x=>x.kind===commentSection&&x.pkg===pkg))current.evidence.push({kind:commentSection,pkg,text:s,page:index+1});}
+        if(commentSection){
+          const note=s.replace(/^.*?Res\.\s*Comments:\s*/i,'').replace(/^(Cashiering|Reservation|General)\b\s*:?\s*/i,'');
+          const minimized=minimizePackageComment(note);
+          if(minimized)current.packageComments.push({kind:commentSection,text:minimized});
+          const tags=packageTags(note);
+          if((tags.length||minimized)&&hasConditionalPackageComment(note)){
+            current.issues.push('หมายเหตุสิทธิ์มีเงื่อนไขหรือระบุการเปลี่ยนแปลง');
+            continue;
+          }
+          for(const pkg of tags)if(!current.evidence.some(x=>x.kind===commentSection&&x.pkg===pkg))current.evidence.push({kind:commentSection,pkg,text:s,page:index+1});
+        }
       }
     }
   }
@@ -57,7 +69,7 @@ export function mergeReports(reports,serviceDate,rateMap={}){
   const rooms={};
   for(const report of reports)for(const record of report.records){
     if(!/^[1235][1-9]\d{2}$/.test(record.room))continue;
-    const r=rooms[record.room]??={room:record.room,names:[],adults:0,children:0,pax:0,pkg:'REVIEW',rates:[],sources:[],lines:[],evidence:[],issues:[],guestRows:0,countNotes:[],_seen:new Set(),_sources:new Set()};
+    const r=rooms[record.room]??={room:record.room,names:[],adults:0,children:0,pax:0,pkg:'REVIEW',rates:[],sources:[],lines:[],evidence:[],issues:[],guestRows:0,countNotes:[],packageComments:[],_seen:new Set(),_sources:new Set()};
     const key=[record.name.toLowerCase(),record.arrival,record.departure,record.adults,record.children,record.rate].join('|');
     if(r._sources.size&&!r._sources.has(report.source))r.issues.push('ห้องเดียวกันปรากฏในหลายไฟล์ กรุณาตรวจว่าซ้ำหรือคนละการจอง');
     r._sources.add(report.source);
@@ -67,6 +79,7 @@ export function mergeReports(reports,serviceDate,rateMap={}){
     r.rates.push(record.rate);r.sources.push(`${report.source} · หน้า ${record.page}`);r.evidence.push(...record.evidence);
     if(rateMap[record.rate])r.evidence.push({kind:'รหัสที่ผู้ดูแลกำหนด',pkg:rateMap[record.rate],code:record.rate});
     r.issues.push(...record.issues);
+    r.packageComments.push(...(record.packageComments||[]));
     if(!record.arrival||!record.departure)r.issues.push('อ่านวันเข้าพัก/ออกไม่ครบ');
     else if(serviceDate<record.arrival||serviceDate>record.departure)r.issues.push('วันที่บริการอยู่นอกช่วงพักในรายงาน');
   }
