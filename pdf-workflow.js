@@ -4,18 +4,11 @@ import {buildReviewBatch,sameRateEvidence,validatedSuggestions} from './package-
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function mountPdfWorkflow({getStore,notify,onImported}){
  const $=s=>document.querySelector(s);let generation=0,reports=[],rooms={},version=null,rateRules={mapping:{},version:null},draftDate='',originals={},processing=false,reviewRequest=null;
- const local=location.hostname==='127.0.0.1';
- $('#cloud-settings').hidden=local;
- const urlInput=$('#worker-url'), secretInput=$('#staff-secret');
- urlInput.value=localStorage.getItem('breakfast-worker-url')||'';
+ const aiEndpoint=location.hostname==='127.0.0.1'
+  ? './api/package-review'
+  : 'https://breakfast-ai.layaresorthotel.workers.dev/api/package-review';
  function aiRequest(options){
-  if(local)return fetch('./api/package-review',options);
-  let url;
-  try{url=new URL(urlInput.value.trim());}catch{throw new Error('กรอก Worker URL ก่อนใช้ AI');}
-  if(url.protocol!=='https:'||!url.hostname.endsWith('.workers.dev')||url.username||url.password||url.port)throw new Error('ตรวจ Worker URL ของโรงแรม');
-  if(!secretInput.value)throw new Error('กรอกรหัสพนักงานสำหรับใช้ AI');
-  localStorage.setItem('breakfast-worker-url',url.origin);
-  return fetch(url.origin+'/api/package-review',{...options,redirect:'error',headers:{...options.headers,Authorization:'Bearer '+secretInput.value}});
+  return fetch(aiEndpoint,{...options,redirect:'error'});
  }
  const testButton=$('#openai-test'), testStatus=$('#openai-test-status');
  testButton.addEventListener('click',async()=>{
