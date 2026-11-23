@@ -4,6 +4,31 @@ import {buildReviewBatch,sameRateEvidence,validatedSuggestions} from './package-
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function mountPdfWorkflow({getStore,notify,onImported}){
  const $=s=>document.querySelector(s);let generation=0,reports=[],rooms={},version=null,rateRules={mapping:{},version:null},draftDate='',originals={},processing=false,reviewRequest=null;
+ const local=location.hostname==='127.0.0.1';
+ $('#cloud-settings').hidden=local;
+ const urlInput=$('#worker-url'), secretInput=$('#staff-secret');
+ urlInput.value=localStorage.getItem('breakfast-worker-url')||'';
+ function aiRequest(options){
+  if(local)return fetch('./api/package-review',options);
+  let url;
+  try{url=new URL(urlInput.value.trim());}catch{throw new Error('กรอก Worker URL ก่อนใช้ AI');}
+  if(url.protocol!=='https:'||!url.hostname.endsWith('.workers.dev')||url.username||url.password||url.port)throw new Error('ตรวจ Worker URL ของโรงแรม');
+  if(!secretInput.value)throw new Error('กรอกรหัสพนักงานสำหรับใช้ AI');
+  localStorage.setItem('breakfast-worker-url',url.origin);
+  return fetch(url.origin+'/api/package-review',{...options,redirect:'error',headers:{...options.headers,Authorization:'Bearer '+secretInput.value}});
+ }
+ const testButton=$('#openai-test'), testStatus=$('#openai-test-status');
+ testButton.addEventListener('click',async()=>{
+  testButton.disabled=true;testStatus.textContent='กำลังส่งตัวอย่างสมมติให้ OpenAI…';
+  try{
+   const response=await aiRequest({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entries:[{id:0,locked:false,signals:[{source:'Reservation',text:'breakfast included'}]}]})});
+   if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('ตรวจ URL และการตั้งค่า Worker');
+   const data=await response.json();
+   if(!response.ok)throw new Error(data.error||'ทดสอบไม่สำเร็จ');
+   testStatus.textContent=data.results?.[0]?.pkg==='RB'?'เชื่อมต่อสำเร็จ · OpenAI ตอบ RB สำหรับตัวอย่างรวมอาหารเช้า':'OpenAI ตอบกลับแล้ว แต่ผลตัวอย่างยังไม่ตรงที่คาด';
+  }catch(error){testStatus.textContent='ทดสอบไม่สำเร็จ · '+error.message;}
+  finally{testButton.disabled=false;}
+ });
  $('#pdf-date').value=today();
  function reset(){reviewRequest?.abort();generation++;reports=[];rooms={};$('#pdf-results').textContent='';$('#pdf-progress').textContent='';}
  function fail(e){notify(e.message||'นำเข้าไม่สำเร็จ',true);}
@@ -22,11 +47,6 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
  function mountOpenAIReview(comparisons){
   const button=$('#review-packages'), status=$('#review-package-status');
   const save=$('#save-pdf-roster');save.disabled=true;
-  if(location.protocol!=='http:'||location.hostname!=='127.0.0.1'){
-   button.disabled=true;
-   status.textContent='เปิดแอปจากเซิร์ฟเวอร์ในเครื่องเพื่อใช้ OpenAI';
-   return;
-  }
   button.addEventListener('click',async()=>{
    const {roomKeys,entries}=buildReviewBatch(rooms,comparisons);
    if(!entries.length)return;
@@ -41,10 +61,10 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
     for(let offset=0;offset<entries.length;offset+=16){
      const batch=entries.slice(offset,offset+16);
      status.textContent='กำลังตรวจ '+(offset+1)+'–'+(offset+batch.length)+' / '+entries.length+' ห้อง';
-     const response=await fetch(new URL('./api/package-review',location.href),{
+     const response=await aiRequest({
       method:'POST',headers:{'Content-Type':'application/json'},signal:request.signal,body:JSON.stringify({entries:batch})
      });
-     if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('กรุณาเปิดแอปด้วย npm start เพื่อใช้ OpenAI');
+     if(!response.headers.get('content-type')?.includes('application/json'))throw new Error('ตรวจ URL และการตั้งค่า Worker');
      const data=await response.json();
      if(!response.ok)throw new Error(data.error||'ตรวจด้วย OpenAI ไม่สำเร็จ');
      for(const [id,result] of validatedSuggestions(batch,data.results))suggestions.set(id,result);
