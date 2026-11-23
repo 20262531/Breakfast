@@ -10,7 +10,7 @@ function dateISO(s){const m=String(s).match(/^(\d{2})[-/](\d{2})[-/](\d{2}|\d{4}
 export function packageTags(text){const result=[];for(const p of ['RO','RB'])if(new RegExp('(^|[^A-Z0-9])(?:\\d+\\s*)?R[ \t]*'+p[1]+'(?=$|[^A-Z0-9])','i').test(String(text)))result.push(p);return result;}
 function rateHint(rate){if(/RO(?:F|\*)?$/i.test(rate))return 'RO';if(/RB\*?$/i.test(rate))return 'RB';return null;}
 export function parseReportPages(pages,source){
-  const records=[],dates=new Set(),errors=[],excluded=new Set();let current=null,commentSection=null,totals=null;
+  const records=[],dates=new Set(),errors=[],excluded=new Set();let priorNote="",priorSection=null,current=null,commentSection=null,totals=null;
   for(let index=0;index<pages.length;index++){
     const lines=linesFromItems(pages[index]);const header=lines.find(l=>l.items.some(x=>x.text==='Name')&&l.items.some(x=>x.text==='Adl.'));
     if(!header){errors.push(`หน้า ${index+1}: ไม่พบหัวตาราง Guests INH`);continue;}
@@ -37,18 +37,32 @@ export function parseReportPages(pages,source){
         if(!/^\d+$/.test(adultText)||!/^\d+$/.test(childText))record.issues.push('อ่าน Adl./Chl. ไม่ครบ');
         if(!name)record.issues.push('ไม่พบชื่อแขก');
         const hint=rateHint(record.rate);if(hint)record.evidence.push({kind:'Rate Code',pkg:hint,code:record.rate});
-        records.push(record);current=record;commentSection=null;
+        priorNote="";priorSection=null;records.push(record);current=record;commentSection=null;
         if(!/^[1235][1-9]\d{2}$/.test(room))excluded.add(room);
       }else if(current){
         const s=line.text;current.lines.push({page:index+1,text:s});
         if(!commentSection&&Math.abs(line.items[0].x-positions.Name)<3){const continuation=col(line,positions.Name,positions.Company);if(continuation)current.name+=' '+continuation;}
+        if(!commentSection && Math.abs(line.items[0].x-positions.Rate)<3 && /^[A-Z0-9*-]{1,16}$/.test(s)){
+          current.rate+=s;
+          current.evidence=current.evidence.filter(e=>e.kind!=='Rate Code');
+          const hint=rateHint(current.rate);if(hint)current.evidence.push({kind:'Rate Code',pkg:hint,code:current.rate});
+        }
         const match=s.match(/(?:Res\.\s*Comments:\s*)?(Cashiering|Reservation|General)(?:\s|$)/i);
-        if(/Profile Notes:/i.test(s)){commentSection=null;continue;}
+        if(/Profile Notes:/i.test(s)){commentSection=null;priorNote="";priorSection=null;continue;}
         if(match)commentSection=match[1][0].toUpperCase()+match[1].slice(1).toLowerCase();
         if(commentSection){
           const note=s.replace(/^.*?Res\.\s*Comments:\s*/i,'').replace(/^(Cashiering|Reservation|General)\b\s*:?\s*/i,'');
+          if(priorNote && priorSection===commentSection && !match){
+            const joined=minimizePackageComment((priorNote+' '+note).replace(/\br\s+([ob])\b/ig,'r$1'));
+            if(joined)current.packageComments.push({kind:commentSection,text:joined});
+          }
+          priorNote=note;priorSection=commentSection;
           const minimized=minimizePackageComment(note);
           if(minimized)current.packageComments.push({kind:commentSection,text:minimized});
+          for(const token of note.match(/\b[A-Z0-9][A-Z0-9*-]{2,30}\b/g)||[]){
+            if(/R[OB]/.test(token)&&!['GROUP','PROMO','PROFILE','ROOM'].includes(token))
+              current.packageComments.push({kind:'Comment code',text:token});
+          }
           const tags=packageTags(note);
           if((tags.length||minimized)&&hasConditionalPackageComment(note)){
             current.issues.push('หมายเหตุสิทธิ์มีเงื่อนไขหรือระบุการเปลี่ยนแปลง');

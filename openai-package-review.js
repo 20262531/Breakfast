@@ -25,6 +25,7 @@ const instructions = [
   'Review hotel meal-plan evidence independently for each input id.',
   'RO = room only / breakfast explicitly excluded. RB = breakfast included in the room package.',
   'Output one result per id. Cite the zero-based index of a signal that explicitly supports the proposed package.',
+  'Read the full Printed rate as a hotel code, including concatenated words and split characters. Prefer explicit room-only or breakfast-included language or verified FO mapping. RO/RB embedded in arbitrary words (GROUP, PROMO) are not package evidence. Use REVIEW for unknown proprietary codes and empty evidence.',
   'Use REVIEW with evidence -1 when locked is true, evidence conflicts, or the current booking entitlement is unclear.',
   'Never infer from an acronym such as BB by itself, a price, an add-on, a request, a conditional offer, or a historical plan.',
   'Same Rate Code observations from other rooms are contextual only. They cannot prove the meal plan for this room or serve as cited evidence.',
@@ -58,5 +59,7 @@ export async function reviewWithOpenAI(entries, options) {
   if (data.status !== 'completed' || !text || content.some(part => part.type === 'refusal')) {
     throw new Error('OpenAI response incomplete');
   }
-  return [...validatedSuggestions(entries, JSON.parse(text).results).values()];
+  const results=JSON.parse(text).results;
+  if(!Array.isArray(results)||results.length!==entries.length||entries.some(entry=>results.filter(row=>row?.id===entry.id).length!==1))throw new Error('Incomplete room coverage');
+  return [...validatedSuggestions(entries,results).values()];
 }

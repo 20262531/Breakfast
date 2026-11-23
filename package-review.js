@@ -9,7 +9,7 @@ const labels = new Set(['RO', 'RB', 'REVIEW']);
 
 export function minimizePackageComment(line) {
   if (typeof line !== 'string') return '';
-  const tokens = line.toLowerCase().match(parts) || [];
+  const tokens = line.toLowerCase().replace(/roomonly/g,' room only ').replace(/breakfast(included|excluded)/g,' breakfast $1 ').replace(/(without|with|no)breakfast/g,' $1 breakfast ').replace(/(package|plan|rate)(rb|ro)\b/g,'$1 $2').match(parts) || [];
   const minimized = [];
   for (const token of tokens) {
     const normalized = token.match(numberTag)?.[1] || token;
@@ -63,15 +63,18 @@ export function buildReviewBatch(rooms, comparisons = new Map()) {
   const roomKeys = [];
   const entries = [];
   for (const room of Object.values(rooms)) {
-    if (room.pkg !== 'REVIEW') continue;
+
     const signals = [];
-    for (const entry of room.evidence) {
+    for (const rate of room.rates || []) {
+      if (/^[A-Z0-9*._ +/-]{1,64}$/i.test(rate)) signals.push({source:'Printed rate',text:rate});
+    }
+    for (const entry of room.evidence || []) {
       if (entry.kind === 'Rate Code' || entry.kind === 'รหัสที่ผู้ดูแลกำหนด') {
         signals.push({ source: entry.kind === 'Rate Code' ? 'Rate Code' : 'FO mapping', text: entry.pkg.toLowerCase() });
       }
     }
     for (const entry of room.packageComments || []) {
-      if (sanitized(entry.text)) signals.push({ source: entry.kind, text: entry.text });
+      if ((entry.kind==='Comment code' && /^[A-Z0-9*-]{3,31}$/.test(entry.text)) || sanitized(entry.text)) signals.push({ source: entry.kind, text: entry.text });
     }
     for (const { counts } of comparisons.get(room.room) || []) {
       for (const pkg of ['RO', 'RB']) {
@@ -79,8 +82,8 @@ export function buildReviewBatch(rooms, comparisons = new Map()) {
       }
     }
     const unique = [...new Map(signals.map(signal => [JSON.stringify(signal), signal])).values()];
-    if (!unique.some(signal => signal.source !== 'Other rooms with the same rate')) continue;
-    const locked = room.issues.some(issue => !issue.startsWith('ยังไม่มีหลักฐาน RO/RB') && issue !== 'หมายเหตุสิทธิ์มีเงื่อนไขหรือระบุการเปลี่ยนแปลง');
+
+    const locked = (room.issues || []).some(issue => !issue.startsWith('ยังไม่มีหลักฐาน RO/RB') && issue !== 'หมายเหตุสิทธิ์มีเงื่อนไขหรือระบุการเปลี่ยนแปลง');
     roomKeys.push(room.room);
     entries.push({ id: roomKeys.length - 1, signals: unique.slice(0, 20), locked: locked || unique.length > 20 });
   }
@@ -92,8 +95,8 @@ export function validateReviewBatch(entries) {
     && new Set(entries.map(entry => entry?.id)).size === entries.length
     && entries.every(entry => entry && Number.isInteger(entry.id) && entry.id >= 0 && entry.id < 1500
       && typeof entry.locked === 'boolean'
-      && Array.isArray(entry.signals) && entry.signals.length > 0 && entry.signals.length <= 20
-      && entry.signals.every(signal => signal && contexts.has(signal.source) && sanitized(signal.text)));
+      && Array.isArray(entry.signals) && entry.signals.length <= 20
+      && entry.signals.every(signal => signal && (['Printed rate','Comment code'].includes(signal.source) ? typeof signal.text === 'string' && /^[A-Z0-9*._ +/-]{1,64}$/i.test(signal.text) : contexts.has(signal.source) && sanitized(signal.text))));
 }
 
 export function validatedSuggestions(entries, results) {

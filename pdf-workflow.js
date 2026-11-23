@@ -21,6 +21,7 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
  });
  function mountOpenAIReview(comparisons){
   const button=$('#review-packages'), status=$('#review-package-status');
+  const save=$('#save-pdf-roster');save.disabled=true;
   if(location.protocol!=='http:'||location.hostname!=='127.0.0.1'){
    button.disabled=true;
    status.textContent='เปิดแอปจากเซิร์ฟเวอร์ในเครื่องเพื่อใช้ OpenAI';
@@ -28,14 +29,14 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
   }
   button.addEventListener('click',async()=>{
    const {roomKeys,entries}=buildReviewBatch(rooms,comparisons);
-   if(!entries.length){status.textContent='ไม่มีห้องรอตรวจที่มีคำเกี่ยวกับแพ็กเกจให้วิเคราะห์';return;}
-   if(!confirm('ส่งเฉพาะคำเกี่ยวกับแพ็กเกจที่คัดออกจากหมายเหตุ และสัญญาณสิทธิ์ ให้ OpenAI ตรวจ '+entries.length+' ห้อง? ผลเป็นข้อเสนอให้ตรวจสอบก่อนเลือกสิทธิ์'))return;
+   if(!entries.length)return;
    const request=new AbortController(), gen=generation;
-   reviewRequest=request;
+   reviewRequest=request;save.disabled=true;
    button.disabled=true;
+   const panel=$('#pdf-results');panel.inert=true;
    const suggestions=new Map();
    const rows=new Map([...$('#pdf-results').querySelectorAll('[data-review-room]')].map(row=>[row.dataset.reviewRoom,row]));
-   for(const row of rows.values())row.querySelector('[data-ai-suggestion]').replaceChildren();
+   for(const row of rows.values())row.querySelector('[data-ai-suggestion]').textContent='กำลังตรวจด้วย AI';
    try{
     for(let offset=0;offset<entries.length;offset+=16){
      const batch=entries.slice(offset,offset+16);
@@ -49,21 +50,35 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
      for(const [id,result] of validatedSuggestions(batch,data.results))suggestions.set(id,result);
     }
     if(gen!==generation||!button.isConnected||request.signal.aborted)return;
-    for(const [id,result] of suggestions){
-     const row=rows.get(roomKeys[id]);
-     if(!row||rooms[roomKeys[id]].pkg!=='REVIEW')continue;
-     const signal=entries[id].signals[result.evidence];
-     row.querySelector('[data-ai-suggestion]').textContent='OpenAI เสนอ '+result.pkg+' · '+signal.source+' · '+signal.text;
+    const counts={RO:0,RB:0,REVIEW:0};
+    for(const entry of entries){
+     const key=roomKeys[entry.id],row=rows.get(key),room=rooms[key],result=suggestions.get(entry.id);
+     const conflict=result && originals[key].pkg!=='REVIEW' && result.pkg!==originals[key].pkg;
+     const pkg=result&&!conflict?result.pkg:'REVIEW';
+     counts[pkg]++;
+     const signal=result&&entry.signals[result.evidence];
+     const reason=signal?signal.source+' · '+signal.text:'';
+     const summary=conflict?'AI และผลอ่านในเครื่องขัดกัน · '+reason:
+       pkg==='REVIEW'?(entry.locked?'ข้อมูลขัดกันหรือไม่ครบ · '+room.issues.join(' / '):'ไม่มีข้อมูลเพียงพอให้ AI ยืนยันสิทธิ์ · กรุณาตรวจ FO'):
+       'AI สรุป '+pkg+' · '+reason;
+     room.aiReview={pkg,summary};
+     row.querySelector('[data-ai-suggestion]').textContent=summary;
+     row.querySelector('[data-field=pkg]').value=pkg;
+     room.pkg=pkg;
+     row.dataset.originalReview=String(pkg==='REVIEW');
     }
-    const shown=[...rows.values()].filter(row=>row.querySelector('[data-ai-suggestion]').textContent).length;
-    status.textContent='ตรวจ '+entries.length+' ห้อง · มีข้อเสนอ '+shown+' ห้อง · ตรวจหลักฐานแล้วเลือก RO หรือ RB เอง';
+    $('#pdf-only-review').dispatchEvent(new Event('change'));
+    $('#pdf-results [data-field=pkg]')?.dispatchEvent(new Event('input'));
+    save.disabled=false;
+    status.textContent='AI ตรวจครบ '+entries.length+' ห้อง · RO '+counts.RO+' · RB '+counts.RB+' · ต้องตรวจ '+counts.REVIEW;
    }catch(error){
-    if(!request.signal.aborted&&button.isConnected)status.textContent=error.message;
+    if(!request.signal.aborted&&button.isConnected){status.textContent='AI ตรวจไม่สำเร็จ · '+error.message;for(const row of rows.values())row.querySelector('[data-ai-suggestion]').textContent='AI ตรวจไม่สำเร็จ · กรุณาลองใหม่';}
    }finally{
     if(reviewRequest===request)reviewRequest=null;
-    if(button.isConnected)button.disabled=false;
+    if(button.isConnected){button.disabled=false;panel.inert=false;}
    }
   });
+  button.click();
  }
  function render(){
   reviewRequest?.abort();
@@ -72,14 +87,15 @@ export function mountPdfWorkflow({getStore,notify,onImported}){
   const comparisons=sameRateEvidence(rooms,reports);
   $('#pdf-results').innerHTML='<div class="preview-count">'+values.length+' ห้องพัก · '+values.reduce((s,r)=>s+r.pax,0)+' คนสำหรับรับลูกค้า · รอตรวจ '+pending+' ห้อง</div><p class="hint">ยอด Adl.+Chl. ของห้องพักที่นำเข้า '+values.reduce((n,r)=>n+r.reportedPax,0)+' คน · ใช้จำนวนแถวรายชื่อที่มากกว่าใน '+values.filter(r=>r.guestRows>r.reportedPax).length+' ห้อง (ดูรายละเอียดโดยยกเลิกตัวกรองรอตรวจสอบ)</p>'+reports.map(r=>'<div class="pdf-source"><strong>'+esc(r.source)+'</strong><br><small>'+r.pages+' หน้า · หัวรายงาน '+r.dates.map(esc).join(', ')+' · รวม '+r.totals.rooms+' ห้องในเอกสาร · ตัดห้องนอกตึก A–D / PM / POS '+r.excluded.length+' ห้อง</small></div>').join('')+(mismatch?'<label class="paid-check"><input type="checkbox" id="pdf-date-ack"><span>หัวรายงาน '+dates.map(esc).join(', ')+' ไม่ตรงกับวันบริการ '+esc(draftDate)+' — ฉันตรวจสอบแล้วว่าใช้รายงานชุดนี้กับวันที่เลือกได้</span></label>':'')+(version?'<div class="notice">มีข้อมูลของวันนี้อยู่แล้ว การยืนยันจะแทนที่รายชื่อด้วย PDF ชุดนี้ทั้งหมด โดยคงประวัติการเข้าทานไว้ โปรดเลือกไฟล์ให้ครบทั้งสองส่วน</div>':'')+
    '<details><summary>กำหนดความหมาย Rate Code สำหรับใช้ครั้งต่อไป</summary><p class="hint">เลือก RO หรือ RB ต่อ Rate Code แล้วบันทึกครั้งเดียว ระบบจะใช้กับทุกห้องที่มีรหัสเดียวกันในครั้งต่อไป</p><div class="table-wrap"><table><thead><tr><th>Rate Code</th><th>หลักฐานจากหมายเหตุในไฟล์</th><th>ความหมายที่ยืนยัน</th></tr></thead><tbody>'+codes.map((code,i)=>{const evidence=[...new Set(reports.flatMap(r=>r.records).filter(r=>r.rate===code).flatMap(r=>r.evidence.filter(e=>e.kind!=='Rate Code').map(e=>e.pkg)))];return '<tr><td>'+esc(code)+'</td><td>'+esc(evidence.join(' / ')||'ไม่มี')+'</td><td><select data-rate-index="'+i+'"><option value="">ยังไม่กำหนด</option><option value="RO" '+(rateRules.mapping[code]==='RO'?'selected':'')+'>RO</option><option value="RB" '+(rateRules.mapping[code]==='RB'?'selected':'')+'>RB</option></select></td></tr>';}).join('')+'</tbody></table></div><button id="save-rate-rules">บันทึกรหัสและอ่านผลใหม่</button><p class="hint">การอ่านผลใหม่จะล้างการแก้ไขรายห้องที่ยังไม่ยืนยันด้านล่าง</p></details>'+
-   '<div class="report-actions pdf-ai-actions"><button id="review-packages" type="button">ตรวจสิทธิ์ที่ค้างด้วย OpenAI</button><span id="review-package-status" class="hint" role="status"></span></div>'+
+   '<div class="report-actions pdf-ai-actions"><button id="review-packages" type="button">ตรวจทุกห้องด้วย OpenAI อีกครั้ง</button><span id="review-package-status" class="hint" role="status"></span></div>'+
    '<div class="notice">รวมทุกแถวของห้องเดียวกัน: ใช้ยอดที่มากกว่าระหว่างผลรวม Adl.+Chl. กับจำนวนแถวรายชื่อ ไม่บวกผู้ร่วมพักซ้ำกับยอดรวมของแถวหลัก แถวข้อมูลเหมือนกันทุกช่องจะไม่นับซ้ำและแจ้งให้ตรวจ</div><div class="pdf-filter"><label><input id="pdf-only-review" type="checkbox" checked> แสดงเฉพาะห้องที่รอตรวจสอบ</label><span id="pdf-count-summary"></span></div><div class="table-wrap"><table class="pdf-review"><thead><tr><th>ห้อง / ผู้พัก</th><th>หลักฐานสิทธิ์</th><th>สถานะ</th><th>คนรวม</th></tr></thead><tbody>'+values.map(r=>'<tr data-review-room="'+r.room+'" data-original-review="'+(r.pkg==='REVIEW')+'"><td><strong>'+r.room+'</strong><br>'+r.names.map(esc).join('<br>')+'<small class="pdf-detail">'+r.guestRows+' แถวรายชื่อ · Adl. '+r.adults+' + Chl. '+r.children+'<br>'+r.countNotes.map(esc).join('<br>')+'<br>'+r.sources.map(esc).join('<br>')+'</small></td><td>'+r.evidence.map(e=>esc(e.kind+': '+(e.code?e.code+' → ':'')+e.pkg)).join('<br>')+'<small class="pdf-detail">Rate: '+r.rates.map(esc).join(', ')+'</small>'+(r.issues.length?'<div class="error">'+r.issues.map(esc).join('<br>')+'</div>':'')+(r.lines?.length?'<details class="room-source-lines"><summary>ดูข้อความทุกบรรทัดที่อ่านได้</summary><div class="pre">'+esc(r.lines.map(l=>'หน้า '+l.page+' · '+l.text).join('\n'))+'</div></details>':'')+(comparisons.get(r.room)||[]).map(({rate,counts})=>'<small class="pdf-detail">รหัส '+esc(rate)+' ในห้องอื่นของไฟล์เดียวกัน · RO '+counts.RO+' / RB '+counts.RB+' ห้อง · ให้ FO ยืนยัน</small>').join('')+'<div data-ai-suggestion class="pdf-detail"></div></td><td><select data-field="pkg" aria-label="สถานะห้อง '+r.room+'">'+['REVIEW','RO','RB'].map(v=>'<option value="'+v+'" '+(r.pkg===v?'selected':'')+'>'+(v==='REVIEW'?(r.detectedPkg?r.detectedPkg+' · รอตรวจข้อมูล':'รอตรวจสอบ'):v)+'</option>').join('')+'</select></td><td><input data-field="pax" aria-label="จำนวนผู้พักห้อง '+r.room+'" type="number" min="0" max="50" step="1" value="'+r.pax+'"></td></tr>').join('')+'</tbody></table></div><div class="notice">ห้องที่ยังรอตรวจสอบจะนำเข้าเป็นสถานะรอตรวจ และไม่สามารถบันทึกเข้าทานได้จนกว่าจะยืนยันสิทธิ์</div><button id="save-pdf-roster" class="primary full">ยืนยันนำเข้ารายงาน PDF</button>';
+  for(const row of $('#pdf-results').querySelectorAll('[data-review-room]'))row.querySelector('[data-ai-suggestion]').textContent='AI ยังไม่ตรวจห้องนี้';
   mountOpenAIReview(comparisons);
   const filter=()=>{document.querySelectorAll('[data-review-room]').forEach(row=>row.hidden=$('#pdf-only-review').checked&&row.dataset.originalReview!=='true');};$('#pdf-only-review').addEventListener('change',filter);filter();
   function update(){let count=0;for(const row of document.querySelectorAll('[data-review-room]')){const r=rooms[row.dataset.reviewRoom];r.pkg=row.querySelector('[data-field=pkg]').value;r.pax=Number(row.querySelector('[data-field=pax]').value);if(r.pkg==='REVIEW')count++;}$('#pdf-count-summary').textContent='คงเหลือรอตรวจ '+count+' ห้อง';}$('#pdf-results').querySelectorAll('[data-field]').forEach(x=>x.addEventListener('input',update));update();
   $('#save-rate-rules').addEventListener('click',async()=>{const b=$('#save-rate-rules');b.disabled=true;try{network();const map={...rateRules.mapping};$('#pdf-results').querySelectorAll('[data-rate-index]').forEach(s=>{const code=codes[Number(s.dataset.rateIndex)];if(s.value)map[code]=s.value;else delete map[code];});if(!confirm('บันทึกความหมาย Rate Code และอ่านผลรายห้องใหม่?'))return;const store=getStore(),gen=generation;await store.saveRateRules(map,rateRules.version);const rules=await store.getRateRules();if(gen!==generation||store!==getStore())return;rateRules=rules;rooms=mergeReports(reports,draftDate,rateRules.mapping);originals=structuredClone(rooms);render();notify('บันทึกกฎ Rate Code แล้ว');}catch(e){fail(e);}finally{if(b.isConnected)b.disabled=false;}});
   $('#save-pdf-roster').addEventListener('click',async()=>{const b=$('#save-pdf-roster');b.disabled=true;try{network();update();if(mismatch&&!$('#pdf-date-ack').checked)throw new Error('กรุณาตรวจและยืนยันวันที่หัวรายงานก่อน');const store=getStore(),payload=structuredClone(rooms),date=draftDate,expected=version,gen=generation;
-   for(const r of Object.values(payload)){if(!Number.isInteger(r.pax)||r.pax<0||r.pax>50)throw new Error('ห้อง '+r.room+': จำนวนผู้พักต้องเป็น 0–50');if(r.pkg!=='REVIEW'&&r.pax===0)throw new Error('ห้อง '+r.room+': ต้องมีจำนวนผู้พัก หรือคงสถานะรอตรวจ');const old=originals[r.room];if(r.pkg!==old.pkg||r.pax!==old.pax)r.reviewedBy=store.user.uid;delete r.packageComments;}
+   for(const r of Object.values(payload)){if(!Number.isInteger(r.pax)||r.pax<0||r.pax>50)throw new Error('ห้อง '+r.room+': จำนวนผู้พักต้องเป็น 0–50');if(r.pkg!=='REVIEW'&&r.pax===0)throw new Error('ห้อง '+r.room+': ต้องมีจำนวนผู้พัก หรือคงสถานะรอตรวจ');const old=originals[r.room];if(r.pkg!==(r.aiReview?.pkg??old.pkg)||r.pax!==old.pax)r.reviewedBy=store.user.uid;delete r.packageComments;}
    if(Object.keys(payload).length>1500||new TextEncoder().encode(JSON.stringify(payload)).length>700000)throw new Error('ข้อมูลใหญ่เกินขนาด 700 KB / 1,500 ห้อง');
    const held=Object.values(payload).filter(r=>r.pkg==='REVIEW').length;if(!confirm(`ยืนยัน ${Object.keys(payload).length} ห้อง สำหรับวันที่ ${date} (รอตรวจ ${held} ห้อง)?`))return;
    await store.importDay(date,payload,expected);if(gen===generation){reset();onImported();}notify('นำเข้า PDF สำเร็จ · ห้องรอตรวจ '+held+' ห้อง');

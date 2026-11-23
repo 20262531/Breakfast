@@ -30,12 +30,12 @@ test('only confirmed rooms from the same report support the rate comparison', ()
   const other = { source: 'LRR', records: [{ room: '5101', rate: 'J-TRVBB*', evidence: [{ pkg: 'RO' }] }] };
   const comparison = sameRateEvidence(rooms, [report, other]);
   assert.deepEqual(comparison.get('1101'), [{ rate: 'J-TRVBB*', counts: { RO: 0, RB: 1 } }]);
-  assert.deepEqual(buildReviewBatch(rooms, comparison).entries, []);
+  assert.equal(buildReviewBatch(rooms, comparison).entries.length, 3);
   rooms[1101].packageComments.push({ kind: 'General', text: 'breakfast included' });
   const batch = buildReviewBatch(rooms, comparison);
   assert.equal(JSON.stringify(batch.entries).includes('1101'), false);
-  assert.equal(JSON.stringify(batch.entries).includes('J-TRVBB'), false);
-  assert.equal(validatedSuggestions(batch.entries, [{ id: 0, pkg: 'RB', evidence: 1 }]).size, 0);
+  assert.equal(JSON.stringify(batch.entries).includes('J-TRVBB'), true);
+  assert.equal(validatedSuggestions(batch.entries, [{ id: 0, pkg: 'RB', evidence: 2 }]).size, 0);
 });
 
 test('rejects fabricated citations, duplicate results and suggestions for locked rooms', () => {
@@ -56,7 +56,7 @@ test('OpenAI wrapper uses Responses structured output and validates model result
     assert.equal(body.store, false);
     assert.equal(body.text.format.strict, true);
     assert.deepEqual(JSON.parse(body.input), [entry]);
-    return Response.json({ status: 'completed', output: [{ content: [{ type: 'output_text', text: JSON.stringify({ results }) }] }] });
+    return Response.json({ status: 'completed', output: [{ content: [{ type: 'output_text', text: JSON.stringify({ results:results.slice(0,1) }) }] }] });
   } });
   assert.deepEqual(response, [results[0]]);
 });
@@ -80,4 +80,16 @@ test('loopback server serves assets and accepts only same-origin, minimized JSON
   const response = await request(origin, [entry]);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { results: [{ id: 0, pkg: 'RB', evidence: 0 }] });
+});
+
+test('reviews every room including empty evidence and reads joined meal-plan wording', () => {
+  const rooms = {
+    1101:{room:'1101',pkg:'RO',rates:['OTARO'],issues:[]},
+    1102:{room:'1102',pkg:'REVIEW',rates:[],issues:[]}
+  };
+  const batch=buildReviewBatch(rooms);
+  assert.deepEqual(batch.roomKeys,['1101','1102']);
+  assert.deepEqual(batch.entries[1].signals,[]);
+  assert.equal(validateReviewBatch(batch.entries),true);
+  assert.equal(minimizePackageComment('packageRB breakfastincluded'),'package rb breakfast included');
 });
